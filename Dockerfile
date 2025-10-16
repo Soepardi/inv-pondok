@@ -1,28 +1,46 @@
-# Gunakan image PHP dengan Composer dan ekstensi yang dibutuhkan
-FROM php:8.3-fpm
+# Gunakan image PHP dengan Composer & ekstensi yang dibutuhkan Laravel
+FROM php:8.3-fpm AS build
 
-# Install dependencies sistem
+# Install dependensi sistem dan Node.js
 RUN apt-get update && apt-get install -y \
-    git curl zip unzip libpng-dev libonig-dev libxml2-dev libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd
+    git unzip curl libpq-dev libpng-dev nodejs npm \
+    && docker-php-ext-install pdo pdo_pgsql gd
 
 # Install Composer
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+RUN curl -sS https://getcomposer.org/installer | php \
+    && mv composer.phar /usr/local/bin/composer
 
-# Copy file Laravel ke container
+# Set working directory
 WORKDIR /var/www/html
-COPY . .
 
-# Install dependensi Laravel
+# Copy composer files dan install dependensi Laravel
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader
 
-# Jalankan build frontend (kalau pakai Vite)
+# Copy semua file proyek
+COPY . .
+
+# Build frontend (Vite)
 RUN npm install && npm run build
 
-# Jalankan artisan commands
-RUN php artisan key:generate
+# Gunakan image produksi yang ringan
+FROM php:8.3-fpm AS production
 
-# Gunakan PHP built-in server
-CMD php artisan serve --host=0.0.0.0 --port=10000
+# Install ekstensi yang dibutuhkan
+RUN apt-get update && apt-get install -y libpq-dev libpng-dev \
+    && docker-php-ext-install pdo pdo_pgsql gd
 
-EXPOSE 10000
+# Set working directory
+WORKDIR /var/www/html
+
+# Copy hasil build dari tahap sebelumnya
+COPY --from=build /var/www/html /var/www/html
+
+# Set permission storage dan bootstrap cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Expose port (Render akan auto detect)
+EXPOSE 8080
+
+# Jalankan PHP-FPM
+CMD ["php-fpm"]

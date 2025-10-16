@@ -1,34 +1,44 @@
-# Gunakan image PHP resmi dengan FPM
-FROM php:8.3-fpm
+# Gunakan image PHP dengan Composer & ekstensi yang dibutuhkan Laravel
+FROM php:8.3-fpm AS build
 
-# Install dependencies sistem & ekstensi yang dibutuhkan Laravel + PgSQL + PhpSpreadsheet
+# Install dependensi sistem dan Node.js
 RUN apt-get update && apt-get install -y \
-    git curl zip unzip libpng-dev libonig-dev libxml2-dev libpq-dev libzip-dev \
-    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip
+    git unzip libpq-dev nodejs npm \
+    && docker-php-ext-install pdo pdo_pgsql
 
-# Install Composer
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
-
-# Atur direktori kerja
+# Set working directory
 WORKDIR /var/www/html
 
-# Salin semua file Laravel ke container
-COPY . .
-
-# Install dependensi Laravel (tanpa dev dependencies)
+# Copy composer files dan install dependensi Laravel
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader
 
-# Build frontend pakai Vite (opsional, kalau pakai Vite)
+# Copy semua file proyek
+COPY . .
+
+# Build frontend (Vite)
 RUN npm install && npm run build
 
-# Generate application key (dijalankan saat build)
-RUN php artisan key:generate || true
+# Generate app key (opsional, kalau mau pre-generate)
+# RUN php artisan key:generate
 
-# Set permission untuk folder storage dan bootstrap/cache
-RUN chmod -R 775 storage bootstrap/cache || true
+# Gunakan image produksi yang ringan
+FROM php:8.3-fpm AS production
 
-# Laravel listen di port 10000
-EXPOSE 10000
+# Install ekstensi yang dibutuhkan
+RUN apt-get update && apt-get install -y libpq-dev && docker-php-ext-install pdo pdo_pgsql
 
-# Jalankan aplikasi Laravel
-CMD php artisan serve --host=0.0.0.0 --port=10000
+# Set working directory
+WORKDIR /var/www/html
+
+# Copy hasil build dari tahap sebelumnya
+COPY --from=build /var/www/html /var/www/html
+
+# Set permission storage dan bootstrap cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Expose port (Render akan auto detect)
+EXPOSE 8080
+
+# Jalankan PHP-FPM
+CMD ["php-fpm"]

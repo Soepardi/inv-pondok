@@ -3,8 +3,8 @@ FROM php:8.3-fpm AS build
 
 # Install dependensi sistem dan Node.js
 RUN apt-get update && apt-get install -y \
-    git unzip curl libpq-dev nodejs npm \
-    && docker-php-ext-install pdo pdo_pgsql
+    git unzip curl libpq-dev libpng-dev nodejs npm \
+    && docker-php-ext-install pdo pdo_pgsql gd
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php \
@@ -27,8 +27,8 @@ RUN npm install && npm run build
 FROM php:8.3-fpm AS production
 
 # Install ekstensi yang dibutuhkan
-RUN apt-get update && apt-get install -y libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql
+RUN apt-get update && apt-get install -y libpq-dev libpng-dev \
+    && docker-php-ext-install pdo pdo_pgsql gd
 
 # Set working directory
 WORKDIR /var/www/html

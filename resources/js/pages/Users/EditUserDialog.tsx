@@ -8,13 +8,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {   Select,
+import {
+  Select,
   SelectContent,
   SelectGroup,
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue, } from "@/components/ui/select";
+  SelectValue,
+} from "@/components/ui/select";
 
 
 
@@ -23,16 +25,22 @@ import {   Select,
 interface User {
   id: number;
   name: string;
-  email : string;
+  email: string;
   password?: string;
   role: 'admin' | 'user';
+  institution_id?: number | null;
+}
 
+interface Institution {
+  id: number;
+  name: string;
 }
 
 interface Props {
   open: boolean;
   onClose: () => void;
   user: User;
+  institutions: Institution[];
 }
 
 interface UserForm {
@@ -41,24 +49,26 @@ interface UserForm {
   password?: string;
   password_confirmation?: string;
   role: 'admin' | 'user';
+  institution_id: string | null;
 }
 
-export default function EditUserDialog({ open, onClose, user }: Props) {
+export default function EditUserDialog({ open, onClose, user, institutions }: Props) {
   const { data, setData, put, processing, errors } = useForm<UserForm>({
     name: user.name,
     email: user.email,
-    password: user.password,
+    password: "", // Don't prefill password
     role: user.role,
+    institution_id: user.institution_id ? user.institution_id.toString() : null,
   });
 
-const handleSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
 
-  put(`/users/${user.id}`, {
-    forceFormData: true,
-    onSuccess: () => onClose(),
-  });
-};
+    put(`/users/${user.id}`, {
+      forceFormData: true,
+      onSuccess: () => onClose(),
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -91,9 +101,10 @@ const handleSubmit = (e: React.FormEvent) => {
 
           {/* Password */}
           <div>
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">Password (Biarkan kosong jika tidak diubah)</Label>
             <Input
               id="password"
+              type="password"
               value={data.password}
               onChange={(e) => setData("password", e.target.value)}
             />
@@ -101,18 +112,18 @@ const handleSubmit = (e: React.FormEvent) => {
               <p className="text-red-500 text-sm">{errors.password}</p>
             )}
           </div>
-        <div>
-          <Label htmlFor="password_confirmation">Konfirmasi Password</Label>
+          <div>
+            <Label htmlFor="password_confirmation">Konfirmasi Password</Label>
             <Input
-             id="password_confirmation"
-             type="password"
-             value={data.password_confirmation}
-             onChange={(e) => setData("password_confirmation", e.target.value)}
-                />
+              id="password_confirmation"
+              type="password"
+              value={data.password_confirmation}
+              onChange={(e) => setData("password_confirmation", e.target.value)}
+            />
             {errors.password_confirmation && (
-            <p className="text-red-500 text-sm">{errors.password_confirmation}</p>
+              <p className="text-red-500 text-sm">{errors.password_confirmation}</p>
             )}
-        </div>
+          </div>
           {/* Role */}
           <div>
             <Label htmlFor="role">Role</Label>
@@ -120,19 +131,49 @@ const handleSubmit = (e: React.FormEvent) => {
               value={data.role || ""}
               onValueChange={(value) => setData("role", value as UserForm["role"])}
             >
-             <SelectTrigger id="role">
-             <SelectValue placeholder="Pilih status" />
-             </SelectTrigger>
+              <SelectTrigger id="role">
+                <SelectValue placeholder="Pilih status" />
+              </SelectTrigger>
               <SelectContent>
-                  <SelectGroup>
-                   <SelectLabel>Role</SelectLabel>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                  </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Role</SelectLabel>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             {errors.role && <p className="text-red-500 text-sm">{errors.role}</p>}
-          </div>          
+          </div>
+
+          {/* Institution Selection (Only for Admin) */}
+          {data.role === 'admin' && (
+            <div>
+              <Label htmlFor="institution">Institusi (Opsional)</Label>
+              <Select
+                value={data.institution_id?.toString() || ""}
+                onValueChange={(value) => setData("institution_id", value === "none" ? null : value)}
+              >
+                <SelectTrigger id="institution">
+                  <SelectValue placeholder="Pilih institusi" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Institusi</SelectLabel>
+                    <SelectItem value="none">Global Admin (Semua Institusi)</SelectItem>
+                    {institutions.map((inst) => (
+                      <SelectItem key={inst.id} value={inst.id.toString()}>
+                        {inst.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Biarkan kosong agar menjadi admin global yang dapat melihat semua institusi.
+              </p>
+            </div>
+          )}
+
           {/* Submit */}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>

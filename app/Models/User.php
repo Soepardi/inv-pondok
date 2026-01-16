@@ -22,12 +22,18 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'institution_id',
     ];
 
     public function loans()
-{
-    return $this->hasMany(Loan::class);
-}
+    {
+        return $this->hasMany(Loan::class);
+    }
+
+    public function institution()
+    {
+        return $this->belongsTo(Institution::class);
+    }
 
     /**
      * The attributes that should be hidden for serialization.
@@ -52,8 +58,8 @@ class User extends Authenticatable
         ];
     }
 
-        public function hasRole($role)
+    public function hasRole($role)
     {
-        return $this->role === $role;
+        return strtolower(trim($this->role)) === strtolower(trim($role));
     }
 }

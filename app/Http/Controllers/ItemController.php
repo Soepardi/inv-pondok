@@ -12,21 +12,96 @@ use Illuminate\Support\Facades\Log;
 class ItemController extends Controller
 {
     // Tampilkan daftar item
-    public function index()
+    public function index(Request $request)
     {
-        $items = Item::with('institution')->get();
-        $institutions = Institution::all();
+        $query = Item::with('institution');
+        $user = auth()->user();
+
+        // Scope by admin's institution
+        if ($user->role === 'admin' && $user->institution_id) {
+            $query->where('institution_id', $user->institution_id);
+        }
+
+        // Search
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('item_code', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter Institution (only for global admins)
+        if (!$user->institution_id && $request->filled('institution') && $request->input('institution') !== 'all') {
+            $query->where('institution_id', $request->input('institution'));
+        }
+
+        // Clone query for stats (before pagination)
+        $statsQuery = $query->clone();
+
+        $stats = [
+            'totalItems' => $statsQuery->count(),
+            'availableItems' => (clone $statsQuery)->where('condition', 'tersedia')->count(),
+            'borrowedItems' => (clone $statsQuery)->where('condition', 'dipinjam')->count(),
+            'damagedItems' => (clone $statsQuery)->where('status', 'rusak')->count(),
+            'totalValue' => (clone $statsQuery)->sum(DB::raw('price * stock')),
+
+            'itemsByStatus' => [
+                'baik' => (clone $statsQuery)->where('status', 'baik')->count(),
+                'rusak' => (clone $statsQuery)->where('status', 'rusak')->count(),
+                'diperbaiki' => (clone $statsQuery)->where('status', 'diperbaiki')->count(),
+            ],
+            'itemsByCondition' => [
+                'tersedia' => (clone $statsQuery)->where('condition', 'tersedia')->count(),
+                'dipinjam' => (clone $statsQuery)->where('condition', 'dipinjam')->count(),
+                'hilang' => (clone $statsQuery)->where('condition', 'hilang')->count(),
+            ],
+            'itemsByInstitution' => Institution::withCount([
+                'items' => function ($q) use ($user) {
+                    if ($user->role === 'admin' && $user->institution_id) {
+                        $q->where('institution_id', $user->institution_id);
+                    }
+                }
+            ])
+                ->when($user->institution_id, function ($q) use ($user) {
+                    $q->where('id', $user->institution_id);
+                })
+                ->get()->map(function ($inst) {
+                    return [
+                        'name' => $inst->name,
+                        'count' => $inst->items_count
+                    ];
+                }),
+        ];
+
+        $perPage = $request->input('per_page', 10);
+        $items = $query->latest()->paginate($perPage)->withQueryString();
+
+        $institutions = Institution::query()
+            ->when($user->institution_id, fn($q) => $q->where('id', $user->institution_id))
+            ->get();
 
         return Inertia::render('Items/Index', [
-            'items' => $items,
+            'items' => $items->items(),
             'institutions' => $institutions,
+            'stats' => $stats,
+            'current_page' => $items->currentPage(),
+            'last_page' => $items->lastPage(),
+            'total' => $items->total(),
+            'from' => $items->firstItem(),
+            'to' => $items->lastItem(),
+            'per_page' => $items->perPage(),
         ]);
     }
 
     // Form tambah item
     public function create()
     {
-        $institutions = Institution::all();
+        $user = auth()->user();
+        $institutions = Institution::query()
+            ->when($user->institution_id, fn($q) => $q->where('id', $user->institution_id))
+            ->get();
+
         return Inertia::render('Items/Create', [
             'institutions' => $institutions,
         ]);
@@ -35,23 +110,37 @@ class ItemController extends Controller
     // Simpan item baru
     public function store(Request $request)
     {
+        $user = auth()->user();
+
         $request->validate([
-            'number_code'    => 'required|string',
-            'name'           => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'price'          => 'required|numeric',
-            'stock'          => 'nullable|integer',
-            'location'       => 'required|string|max:255',
-            'status'         => 'required|in:baik,rusak,diperbaiki',
-            'condition'      => 'required|in:tersedia,dipinjam,hilang',
+            'number_code' => 'required|string',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'required|numeric|min:0',
+            'stock' => 'nullable|integer|min:0',
+            'location' => 'required|string|max:255',
+            'status' => 'required|in:baik,rusak,diperbaiki',
+            'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
-            'photo'          => 'nullable|image|max:2048',
+            'photo' => 'nullable|image|max:2048',
         ]);
+
+        // Force institution ID if admin is strict
+        if ($user->role === 'admin' && $user->institution_id) {
+            $request->merge(['institution_id' => $user->institution_id]);
+        }
 
         $institution = Institution::findOrFail($request->institution_id);
 
         $data = $request->only([
-            'name', 'description', 'price', 'stock', 'location', 'status', 'condition', 'institution_id'
+            'name',
+            'description',
+            'price',
+            'stock',
+            'location',
+            'status',
+            'condition',
+            'institution_id'
         ]);
 
         $data['item_code'] = $institution->code . '-' . $request->number_code;
@@ -82,10 +171,10 @@ class ItemController extends Controller
         //Log::info('📦 Request Data:', $request->all());
         //Log::info('📁 Files:', $request->allFiles());
         //Log::info('🔍 Item ID: ' . $item->id);
-            $request->merge([
-        'price' => $request->price ? (float) $request->price : 0,
-        'stock' => $request->stock ? (int) $request->stock : 0,
-    ]);
+        $request->merge([
+            'price' => $request->price ? (float) $request->price : 0,
+            'stock' => $request->stock ? (int) $request->stock : 0,
+        ]);
         // Validasi input
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -114,12 +203,12 @@ class ItemController extends Controller
         // Handle file upload
         if ($request->hasFile('photo')) {
             //Log::info('🖼️ Processing photo upload: ' . $request->file('photo')->getClientOriginalName());
-            
+
             // Hapus foto lama jika ada
             if ($item->photo && \Storage::disk('public')->exists($item->photo)) {
                 \Storage::disk('public')->delete($item->photo);
             }
-            
+
             $item->photo = $request->file('photo')->store('items', 'public');
             Log::info('📸 Photo stored at: ' . $item->photo);
         }
@@ -127,14 +216,14 @@ class ItemController extends Controller
         $saved = $item->save();
 
         //Log::info('💾 Save result: ' . ($saved ? 'SUCCESS' : 'FAILED'));
-        
+
         if ($saved) {
             $item->refresh();
             Log::info('🆕 Updated item data:', $item->toArray());
             Log::info('🎉 === UPDATE SUCCESS ===');
-            
+
             return redirect()->route('items.index')
-                            ->with('success', 'Item berhasil diupdate');
+                ->with('success', 'Item berhasil diupdate');
         }
 
         //Log::error('❌ === UPDATE FAILED ===');

@@ -11,157 +11,174 @@ use Carbon\Carbon;
 class LoanController extends Controller
 {
     // 📌 List semua pinjaman (admin: semua, user: sendiri)
-    public function index()
+    public function index(Request $request)
     {
-        if(auth()->user()->role === 'admin'){
-            $loans = Loan::with(['user','item'])->latest()->get();
+        $query = Loan::query();
+        $user = auth()->user();
+
+        // Eager load relationships
+        if ($user->role === 'admin') {
+            $query->with(['user', 'item']);
+
+            // Scope by admin's institution
+            if ($user->institution_id) {
+                $query->whereHas('item', function ($q) use ($user) {
+                    $q->where('institution_id', $user->institution_id);
+                });
+            }
         } else {
-            $loans = Loan::with(['item','institution'])
-                         ->where('user_id', auth()->id())
-                         ->latest()
-                         ->get();
+            $query->with(['item.institution'])
+                ->where('user_id', auth()->id());
         }
 
+        // Search
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search, $user) {
+                $q->whereHas('item', function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('item_code', 'like', "%{$search}%");
+                });
+                // Admin can search users too
+                if ($user->role === 'admin') {
+                    $q->orWhereHas('user', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+                }
+            });
+        }
+
+        // Filter Status
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Pagination
+        $perPage = $request->input('per_page', 10);
+        $loans = $query->latest()->paginate($perPage)->withQueryString();
+
         return Inertia::render('Loans/Index', [
-            'loans' => $loans,
+            'loans' => $loans->items(),
+            'current_page' => $loans->currentPage(),
+            'last_page' => $loans->lastPage(),
+            'total' => $loans->total(),
+            'from' => $loans->firstItem(),
+            'to' => $loans->lastItem(),
+            'per_page' => $loans->perPage(),
         ]);
     }
 
     // 📌 Form peminjaman (hanya user)
-    public function create()
+    public function create(Request $request)
     {
-        if(auth()->user()->role !== 'user') {
-            abort(403, 'Unauthorized action.');
+        $query = Item::with('institution')
+            ->where('condition', 'tersedia')
+            ->where('status', 'baik')
+            ->where('stock', '>', 0);
+
+        if ($request->filled('search')) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', "%{$searchTerm}%")
+                    ->orWhere('item_code', 'like', "%{$searchTerm}%")
+                    ->orWhere('description', 'like', "%{$searchTerm}%");
+            });
         }
 
-        $items = Item::with('institution')
-        ->where('condition', 'tersedia')->get();
+        if ($request->filled('institution')) {
+            // Handle precise filtering if ID or name is passed. Assuming name based on previous snippets, but ID is safer. 
+            // Let's support checks.
+            $query->whereHas('institution', function ($q) use ($request) {
+                // If numeric, assume ID, else Name
+                if (is_numeric($request->institution)) {
+                    $q->where('id', $request->institution);
+                } else {
+                    $q->where('name', $request->institution);
+                }
+            });
+        }
+
+        // Pagination
+        $perPage = $request->input('per_page', 10);
+        $items = $query->paginate($perPage)->withQueryString();
+
+        // Get institutions that actually have available items
+        $institutions = \App\Models\Institution::whereHas('items', function ($q) {
+            $q->where('condition', 'tersedia')
+                ->where('status', 'baik')
+                ->where('stock', '>', 0);
+        })->get();
 
         return Inertia::render('Loans/Create', [
             'items' => $items,
+            'institutions' => $institutions,
+            'filters' => $request->only(['search', 'institution']),
+            'per_page' => $items->perPage(),
         ]);
     }
 
-    // 📌 Simpan pinjaman (hanya user)
+    // 📌 Simpan pinjaman baru (hanya user)
     public function store(Request $request)
     {
-        if(auth()->user()->role !== 'user') {
-            abort(403, 'Unauthorized action.');
-        }
-
-        \Log::info('Loan store request data:', $request->all());
-
         $request->validate([
-            'item_id'   => 'required|exists:items,id',
+            'item_id' => 'required|exists:items,id',
             'loan_date' => 'required|date|after_or_equal:today',
-            'due_date'  => 'required|date|after:loan_date',
-            'stock'     => 'required|integer|min:1', // Tambah validasi stock
-            'notes'     => 'nullable|string|max:500',
+            'due_date' => 'required|date|after:loan_date',
+            'stock' => 'required|integer|min:1',
         ]);
 
-        // Validasi maksimal 30 hari
-        $loanDate = Carbon::parse($request->loan_date);
-        $dueDate = Carbon::parse($request->due_date);
-        $maxDueDate = $loanDate->copy()->addDays(30);
-        
-        if ($dueDate->gt($maxDueDate)) {
-            \Log::warning('Due date exceeds 30 days');
-            return back()->withErrors(['due_date' => 'Maksimal peminjaman adalah 30 hari.']);
-        }
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            $item = Item::lockForUpdate()->find($request->item_id);
 
-        // Cek ketersediaan item
-        $item = Item::findOrFail($request->item_id);
-        
-        // Validasi stock cukup
-        if ($item->stock < $request->stock) {
-            return back()->withErrors(['stock' => 'Stok tidak mencukupi. Stok tersedia: ' . $item->stock]);
-        }
+            // Double check availability
+            if ($item->stock < $request->stock) {
+                return back()->withErrors(['stock' => 'Stok barang tidak mencukupi (Tersedia: ' . $item->stock . ')']);
+            }
+            if ($item->condition !== 'tersedia' || $item->status !== 'baik') {
+                return back()->withErrors(['item_id' => 'Barang tidak tersedia untuk dipinjam saat ini.']);
+            }
 
-        if ($item->condition !== 'tersedia') {
-            \Log::warning('Item not available');
-            return back()->withErrors(['item' => 'Item tidak tersedia untuk dipinjam.']);
-        }
-
-        // Cek duplikasi peminjaman
-        $existingLoan = Loan::where('user_id', auth()->id())
-            ->where('item_id', $request->item_id)
-            ->whereIn('status', ['pending', 'approved'])
-            ->first();
-
-        if ($existingLoan) {
-            \Log::warning('Duplicate loan found');
-            return back()->withErrors(['item' => 'Anda sudah meminjam item ini dan belum mengembalikannya.']);
-        }
-
-        \Log::info('Creating loan with data:', [
-            'user_id' => auth()->id(),
-            'item_id' => $request->item_id,
-            'loan_date' => $request->loan_date,
-            'due_date' => $request->due_date,
-            'stock' => $request->stock, // Log stock
-            'notes' => $request->notes,
-            'status' => 'pending'
-        ]);
-
-        try {
-            // Create loan
-            $loan = Loan::create([
-                'user_id'   => auth()->id(),
-                'item_id'   => $request->item_id,
+            // Create Loan
+            Loan::create([
+                'user_id' => auth()->id(),
+                'item_id' => $item->id,
                 'loan_date' => $request->loan_date,
-                'due_date'  => $request->due_date,
-                'stock'     => $request->stock, // Simpan jumlah yang dipinjam
-                'notes'     => $request->notes,
-                'status'    => 'pending',
+                'due_date' => $request->due_date,
+                'stock' => $request->stock,
+                'status' => 'pending',
+                'return_date' => null,
             ]);
 
-            \Log::info('Loan created successfully:', $loan->toArray());
-
-            // Update stock item (kurangi stock)
+            // Decrement Stock
             $item->decrement('stock', $request->stock);
-            
-            // Update kondisi item jika stock habis
-            if ($item->stock <= 0) {
+
+            // Update condition if out of stock
+            if ($item->stock === 0) {
                 $item->update(['condition' => 'dipinjam']);
             }
 
-            \Log::info('Item stock updated:', [
-                'item_id' => $item->id,
-                'new_stock' => $item->stock,
-                'condition' => $item->condition
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Error creating loan: ' . $e->getMessage());
-            \Log::error('Exception trace:', $e->getTrace());
-            return back()->withErrors(['error' => 'Terjadi kesalahan saat membuat peminjaman.']);
-        }
-
-        return redirect()->route('history.my')->with('success', 'Peminjaman berhasil diajukan. Menunggu persetujuan admin.');
+            return redirect()->route('history.my')->with('success', 'Permintaan peminjaman berhasil dibuat. Menunggu persetujuan admin.');
+        });
     }
 
     // 📌 Setujui pinjaman (hanya admin)
     public function approve(Loan $loan)
     {
-        if(auth()->user()->role !== 'admin') {
+        $user = auth()->user();
+        if ($user->role !== 'admin') {
             abort(403, 'Unauthorized action.');
+        }
+
+        // Enforce institution check
+        if ($user->institution_id && $loan->item->institution_id !== $user->institution_id) {
+            abort(403, 'Unauthorized action. You can only manage loans for your institution.');
         }
 
         if ($loan->status !== 'approved') {
             $loan->update(['status' => 'approved']);
-
-            $item = $loan->item;
-            if ($item) {
-                // Pastikan stock berkurang hanya jika item memiliki stock
-                if ($item->stock > 0) {
-                    $item->decrement('stock', 1);
-                }
-                
-                // Update condition berdasarkan stock
-                if ($item->stock <= 0) {
-                    $item->update(['condition' => 'dipinjam']);
-                }
-            }
+            // Note: Stock was already decremented in store() when the user requested the loan.
+            // When status becomes 'approved', we don't need to decrement again.
         }
         return redirect()->back()->with('success', 'Peminjaman disetujui');
     }
@@ -169,8 +186,14 @@ class LoanController extends Controller
     // 📌 Tolak pinjaman (hanya admin)
     public function reject(Loan $loan)
     {
-        if(auth()->user()->role !== 'admin') {
+        $user = auth()->user();
+        if ($user->role !== 'admin') {
             abort(403, 'Unauthorized action.');
+        }
+
+        // Enforce institution check
+        if ($user->institution_id && $loan->item->institution_id !== $user->institution_id) {
+            abort(403, 'Unauthorized action. You can only manage loans for your institution.');
         }
 
         // Kembalikan stock item jika loan ditolak
@@ -178,7 +201,7 @@ class LoanController extends Controller
             $item = $loan->item;
             if ($item) {
                 $item->increment('stock', $loan->stock);
-                
+
                 // Update condition jika stock kembali > 0
                 if ($item->stock > 0) {
                     $item->update(['condition' => 'tersedia']);
@@ -187,7 +210,7 @@ class LoanController extends Controller
         }
 
         $loan->update(['status' => 'rejected']);
-        
+
         return redirect()->back()->with('success', 'Peminjaman ditolak');
     }
 
@@ -195,7 +218,7 @@ class LoanController extends Controller
     public function returnLoan(Request $request, Loan $loan)
     {
         // Authorization: admin bisa return semua, user hanya bisa return pinjaman sendiri
-        if(auth()->user()->role !== 'admin' && $loan->user_id !== auth()->id()) {
+        if (auth()->user()->role !== 'admin' && $loan->user_id !== auth()->id()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -209,7 +232,7 @@ class LoanController extends Controller
         }
 
         $loan->update([
-            'status'      => 'returned',
+            'status' => 'returned',
             'return_date' => now(),
             'return_proof' => $request->file('return_proof')->store('returns', 'public'),
         ]);
@@ -229,7 +252,7 @@ class LoanController extends Controller
     // 📌 Hapus pinjaman (hanya admin)
     public function destroy(Loan $loan)
     {
-        if(auth()->user()->role !== 'admin') {
+        if (auth()->user()->role !== 'admin') {
             abort(403, 'Unauthorized action.');
         }
 
@@ -247,5 +270,64 @@ class LoanController extends Controller
         $loan->delete();
 
         return redirect()->route('loans.index')->with('success', 'Data pinjaman dihapus');
+    }
+    // 📌 Mass Action (admin only)
+    public function massAction(Request $request)
+    {
+        $request->validate([
+            'loan_ids' => 'required|array',
+            'loan_ids.*' => 'exists:loans,id',
+            'action' => 'required|in:approve,reject,delete',
+        ]);
+
+        $user = auth()->user();
+        if ($user->role !== 'admin') {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $loans = Loan::with('item')->whereIn('id', $request->loan_ids)->get();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($loans, $request, $user) {
+            foreach ($loans as $loan) {
+                // Enforce institution check per loan
+                if ($user->institution_id && $loan->item->institution_id !== $user->institution_id) {
+                    continue; // Skip loans not belonging to admin's institution
+                }
+
+                switch ($request->action) {
+                    case 'approve':
+                        if ($loan->status !== 'approved') {
+                            $loan->update(['status' => 'approved']);
+                        }
+                        break;
+                    case 'reject':
+                        if ($loan->status === 'pending') {
+                            $item = $loan->item;
+                            if ($item) {
+                                $item->increment('stock', $loan->stock);
+                                if ($item->stock > 0) {
+                                    $item->update(['condition' => 'tersedia']);
+                                }
+                            }
+                        }
+                        $loan->update(['status' => 'rejected']);
+                        break;
+                    case 'delete':
+                        if (in_array($loan->status, ['pending', 'approved'])) {
+                            $item = $loan->item;
+                            if ($item) {
+                                $item->increment('stock', $loan->stock);
+                                if ($item->stock > 0) {
+                                    $item->update(['condition' => 'tersedia']);
+                                }
+                            }
+                        }
+                        $loan->delete();
+                        break;
+                }
+            }
+        });
+
+        return redirect()->back()->with('success', 'Aksi massal berhasil diproses.');
     }
 }

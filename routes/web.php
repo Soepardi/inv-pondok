@@ -18,7 +18,7 @@ Route::get('/', function () {
 // Semua route butuh login & verifikasi email
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // Dashboard (hanya admin)
+    // Dashboard - Admin only
     Route::get('dashboard', [DashboardController::class, 'index'])
         ->middleware('role:admin')
         ->name('dashboard');
@@ -27,10 +27,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('loans/all', [LoanController::class, 'index'])
             ->name('loans.admin.index'); // lihat semua pinjaman
-        Route::resource('users', UserController::class);
-        Route::resource('institutions', InstitutionController::class);
+
         Route::resource('items', ItemController::class);
         Route::resource('history', HistoryController::class)->only(['index']);
+
+        Route::resource('users', UserController::class);
+        Route::resource('institutions', InstitutionController::class);
     });
 
     Route::prefix('export')->group(function () {
@@ -43,7 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('loans')->group(function () {
         // List pinjaman (admin lihat semua, user lihat sendiri)
         Route::get('/', [LoanController::class, 'index'])->name('loans.index');
-        
+
         // Form buat pinjaman baru & simpan (user only)
         Route::middleware('role:user')->group(function () {
             Route::get('/create', [LoanController::class, 'create'])->name('loans.create');
@@ -57,9 +59,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/{loan}/reject', [LoanController::class, 'reject'])
             ->middleware('role:admin')->name('loans.reject');
 
+        // Mass Action
+        Route::post('/mass-action', [LoanController::class, 'massAction'])
+            ->middleware('role:admin')->name('loans.mass_action');
+
         // Return barang - bisa diakses admin dan user (tanpa middleware role)
         Route::put('/{loan}/return', [LoanController::class, 'returnLoan'])
             ->name('loans.return');
+
+        // Hapus pinjaman (admin only)
+        Route::delete('/{loan}', [LoanController::class, 'destroy'])
+            ->middleware('role:admin')
+            ->name('loans.destroy');
     });
 
     // ---------------- History ----------------
@@ -68,5 +79,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('history.my');
 });
 
-require __DIR__.'/settings.php';
-require __DIR__.'/auth.php';
+require __DIR__ . '/settings.php';
+require __DIR__ . '/auth.php';

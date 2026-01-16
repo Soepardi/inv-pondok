@@ -7,8 +7,11 @@ interface AppLayoutProps {
     breadcrumbs?: BreadcrumbItem[];
 }
 
+import { Toaster } from '@/components/ui/sonner';
+
 export default ({ children, breadcrumbs, ...props }: AppLayoutProps) => (
     <AppLayoutTemplate breadcrumbs={breadcrumbs} {...props}>
         {children}
+        <Toaster />
     </AppLayoutTemplate>
 );

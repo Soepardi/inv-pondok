@@ -1,14 +1,12 @@
-import AppLogoIcon from './app-logo-icon';
+import AppLogoIcon from '@/components/app-logo-icon';
 
 export default function AppLogo() {
     return (
-        <>
-            <div className="flex items-center">
-                <AppLogoIcon className="h-5 w-auto fill-current text-white dark:text-black" />
-            </div>
+        <div className="flex items-center gap-2">
+            <AppLogoIcon className="h-6 w-6 object-contain" />
             <div className="ml-1 grid flex-1 text-left text-sm">
-                <span className="mb-0.5 truncate leading-tight font-semibold">Inventaris PTM</span>
+                <span className="mb-0.5 truncate leading-tight font-bold text-foreground">Inventaris PTM</span>
             </div>
-        </>
+        </div>
     );
 }

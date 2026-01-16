@@ -13,11 +13,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { 
-  Calendar, 
-  Package, 
-  MapPin, 
-  Building, 
+import {
+  Calendar,
+  Package,
+  MapPin,
+  Building,
   AlertCircle,
   Clock,
   Info,
@@ -32,16 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-interface Item {
-  id: number;
-  item_code: string;
-  name: string;
-  stock: number;
-  location: string;
-  status: string;
-  condition: string;
-  institution?: { id: number; name: string };
-}
+import { Item } from "@/types";
 
 interface Props {
   open: boolean;
@@ -60,7 +51,7 @@ interface LoanForm {
 export default function LoanItemDialog({ open, onClose, item }: Props) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const minDueDate = addDays(today, 1);
   const maxDueDate = addDays(today, 30);
 
@@ -81,7 +72,7 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const minDueDate = addDays(today, 1);
-      
+
       setData({
         item_id: item.id,
         notes: "",
@@ -120,13 +111,13 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!item) return;
 
     // Validasi frontend
     const loanDate = new Date(data.loan_date);
     const dueDate = new Date(data.due_date);
-    
+
     loanDate.setHours(0, 0, 0, 0);
     dueDate.setHours(0, 0, 0, 0);
 
@@ -175,7 +166,7 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
   const handleDueDateSelect = (date: Date | undefined) => {
     if (date) {
       date.setHours(0, 0, 0, 0);
-      
+
       const loanDate = new Date(data.loan_date);
       loanDate.setHours(0, 0, 0, 0);
 
@@ -199,23 +190,23 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
 
   const getDurationDays = (): number => {
     if (!selectedDueDate) return 0;
-    
+
     const loanDate = new Date(data.loan_date);
     loanDate.setHours(0, 0, 0, 0);
-    
+
     const dueDate = new Date(selectedDueDate);
     dueDate.setHours(0, 0, 0, 0);
-    
+
     const diffTime = dueDate.getTime() - loanDate.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const isDateValid = (): boolean => {
     if (!selectedDueDate) return false;
-    
+
     const loanDate = new Date(data.loan_date);
     const dueDate = new Date(selectedDueDate);
-    
+
     return dueDate > loanDate && dueDate <= addDays(loanDate, 30);
   };
 
@@ -259,17 +250,17 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  <Badge 
-                    variant={item.status === 'baik' ? 'default' : 'destructive'} 
+                  <Badge
+                    variant={item.status === 'baik' ? 'default' : 'destructive'}
                     className="text-xs"
                   >
                     {item.status}
                   </Badge>
-                  <Badge 
+                  <Badge
                     variant={
-                      item.condition === 'tersedia' ? 'default' : 
-                      item.condition === 'dipinjam' ? 'secondary' : 'destructive'
-                    } 
+                      item.condition === 'tersedia' ? 'default' :
+                        item.condition === 'dipinjam' ? 'secondary' : 'destructive'
+                    }
                     className="text-xs"
                   >
                     {item.condition}
@@ -313,7 +304,7 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
                   <CheckCircle2 className="h-3 w-3 text-green-600" />
                 )}
               </Label>
-              
+
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -329,7 +320,7 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-3" align="start">
-                  <ShadCalendar 
+                  <ShadCalendar
                     mode="single"
                     selected={selectedDueDate}
                     onSelect={handleDueDateSelect}
@@ -341,14 +332,14 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
                       loanDate.setHours(0, 0, 0, 0);
                       const minDate = addDays(loanDate, 1);
                       const maxDate = addDays(loanDate, 30);
-                      
+
                       return date <= loanDate || date > maxDate;
                     }}
                     initialFocus
                   />
                 </PopoverContent>
               </Popover>
-              
+
               {(errors.due_date || dateError) && (
                 <p className="text-red-500 text-xs flex items-center gap-1">
                   <Info className="h-3 w-3" />
@@ -359,11 +350,10 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
 
             {/* Duration Info - Hanya Tampil Jika Valid */}
             {isDateValid() && (
-              <div className={`p-2 rounded border text-center text-xs ${
-                durationDays > 20 
+              <div className={`p-2 rounded border text-center text-xs ${durationDays > 20
                   ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 text-amber-800 dark:text-amber-300"
                   : "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800 text-green-800 dark:text-green-300"
-              }`}>
+                }`}>
                 <span className="font-semibold">Durasi: {durationDays} hari</span>
                 {durationDays > 20 && (
                   <div className="mt-0.5 text-xs">Peminjaman jangka panjang</div>
@@ -455,17 +445,17 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
 
         {/* Fixed Footer Buttons */}
         <div className="flex gap-2 pt-4 border-t flex-shrink-0">
-          <Button 
-            type="button" 
-            variant="outline" 
+          <Button
+            type="button"
+            variant="outline"
             onClick={onClose}
             disabled={processing}
             className="flex-1 text-sm h-9"
           >
             Batal
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={processing || !canBorrow || !isValid}
             onClick={handleSubmit}
             className="flex-1 text-sm h-9"

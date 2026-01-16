@@ -3,43 +3,38 @@ import { LucideIcon } from 'lucide-react';
 import { PageProps as InertiaPageProps } from "@inertiajs/core";
 
 export interface Auth {
-    user: User;
+  user: User;
 }
 
 export interface BreadcrumbItem {
-    title: string;
-    href: string;
-}
-
-export interface NavGroup {
-    title: string;
-    items: NavItem[];
+  title: string;
+  href: string;
 }
 
 export interface NavItem {
-    title: string;
-    href: NonNullable<InertiaLinkProps['href']>;
-    icon?: LucideIcon | null;
-    isActive?: boolean;
+  title: string;
+  href: NonNullable<InertiaLinkProps['href']>;
+  icon?: LucideIcon | null;
+  isActive?: boolean;
 }
 
 export interface SharedData {
-    name: string;
-    quote: { message: string; author: string };
-    auth: Auth;
-    sidebarOpen: boolean;
-    [key: string]: unknown;
+  name: string;
+  quote: { message: string; author: string };
+  auth: Auth;
+  sidebarOpen: boolean;
+  [key: string]: unknown;
 }
 
 export interface User {
-    id: number;
-    name: string;
-    email: string;
-    avatar?: string;
-    email_verified_at: string | null;
-    created_at: string;
-    updated_at: string;
-    [key: string]: unknown; // This allows for additional properties...
+  id: number;
+  name: string;
+  email: string;
+  avatar?: string;
+  email_verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
 }
 
 export type PageProps<T = Record<string, unknown>> = T & {
@@ -54,3 +49,7 @@ export type PageProps<T = Record<string, unknown>> = T & {
 };
 export type PageProps<T = {}> = InertiaPageProps & T;
 export * from './item';
+
+declare global {
+  var route: (name?: string, params?: any, absolute?: boolean, config?: any) => string;
+}

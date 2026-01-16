@@ -1,7 +1,8 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react'; // Add router
 import history from '@/routes/history';
+import { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -13,10 +14,13 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  Package, 
-  Calendar, 
-  CalendarCheck, 
+import {
+  Search,
+  Filter,
+  Download,
+  Package,
+  Calendar,
+  CalendarCheck,
   History as HistoryIcon,
   User,
   Clock,
@@ -24,6 +28,16 @@ import {
   XCircle,
   PackageCheck
 } from 'lucide-react';
+import { Input } from "@/components/ui/input";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import {
   Select,
   SelectContent,
@@ -46,7 +60,20 @@ interface Loan {
 }
 
 interface MyHistoryProps {
-  loans: Loan[];
+  loans: {
+    data: Loan[];
+    current_page: number;
+    last_page: number;
+    from: number;
+    to: number;
+    total: number;
+    links: Array<{ url: string | null; label: string; active: boolean }>;
+  };
+  filters: {
+    search?: string;
+    status?: string;
+  };
+  per_page: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -110,16 +137,52 @@ const getDaysRemaining = (dueDate: string) => {
   return diffDays;
 };
 
-export default function MyHistory({ loans }: MyHistoryProps) {
-  const totalLoans = loans.length;
-  const returnedLoans = loans.filter(loan => loan.status === 'returned').length;
-  const activeLoans = loans.filter(loan => loan.status === 'approved').length;
-  const pendingLoans = loans.filter(loan => loan.status === 'pending').length;
+export default function MyHistory({ loans, filters, per_page = 10 }: MyHistoryProps) {
+  // We can't easily calculate accurate totals for returned/active/pending from just the paginated slice
+  // So we might hide these specific summary cards or ask backend for stats separately.
+  // For now, let's use the `total` from paginator as generic total.
+  // The backend could pass extra stats props if we really want "Active Loans count" etc.
+
+  const [searchTerm, setSearchTerm] = useState(filters.search || '');
+  const [statusFilter, setStatusFilter] = useState<string>(filters.status || 'all');
+  const [perPage, setPerPage] = useState(per_page.toString());
+
+  const applyFilters = (overrideParams: Record<string, string> = {}) => {
+    const currentSearch = 'search' in overrideParams ? overrideParams.search : searchTerm;
+    const currentStatus = 'status' in overrideParams ? overrideParams.status : statusFilter;
+    const currentPerPage = 'per_page' in overrideParams ? overrideParams.per_page : perPage;
+
+    router.get(window.location.pathname, {
+      search: currentSearch,
+      status: currentStatus === 'all' ? undefined : currentStatus,
+      per_page: currentPerPage,
+    }, {
+      preserveState: true,
+      replace: true,
+      preserveScroll: true,
+    });
+  };
+
+  const handleSearch = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    applyFilters();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
+  };
+
+  const handleStatusChange = (val: string) => {
+    setStatusFilter(val);
+    applyFilters({ status: val });
+  };
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Riwayat Peminjaman Saya" />
-      
+
       <div className="container mx-auto py-6 space-y-6 p-4">
         {/* Header */}
         <div className="flex flex-col gap-2">
@@ -137,69 +200,43 @@ export default function MyHistory({ loans }: MyHistoryProps) {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl sm:text-2xl font-bold">{totalLoans}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Total</p>
-                </div>
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <HistoryIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600">{returnedLoans}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Dikembalikan</p>
-                </div>
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-green-100 flex items-center justify-center">
-                  <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl sm:text-2xl font-bold text-orange-600">{activeLoans}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Aktif</p>
-                </div>
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-orange-100 flex items-center justify-center">
-                  <Package className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl sm:text-2xl font-bold text-yellow-600">{pendingLoans}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Menunggu</p>
-                </div>
-                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Stats Grid - Simplified as we only have total from paginator */}
+        {/* If we want detailed stats, we need to pass them from controller separately. 
+            For now, I'll remove the detailed breakdown to avoid showing wrong numbers based on just current page data.
+            Or just show Total Peminjaman.
+        */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         </div>
 
-        {/* Filters */}
+        {/* Streamlined Toolbar */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="space-y-2">
-                <Select defaultValue="all">
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Filter Status" />
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {/* Left Side: Search & Primary Action */}
+              <div className="flex flex-1 items-center gap-2 w-full md:max-w-md">
+                <form onSubmit={handleSearch} className="flex flex-1 gap-2 items-center w-full">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Cari barang..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button type="submit" className="gap-2 shrink-0">
+                    <Search className="h-4 w-4" />
+                    <span className="hidden sm:inline">Cari</span>
+                  </Button>
+                </form>
+              </div>
+
+              {/* Right Side: Filters */}
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                {/* Status Filter */}
+                <Select value={statusFilter} onValueChange={handleStatusChange}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map((option) => (
@@ -209,7 +246,24 @@ export default function MyHistory({ loans }: MyHistoryProps) {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* Per Page Selector */}
+                <Select value={perPage} onValueChange={(val) => {
+                  setPerPage(val);
+                  applyFilters({ per_page: val });
+                }}>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="15">15</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
             </div>
           </CardContent>
         </Card>
@@ -219,7 +273,7 @@ export default function MyHistory({ loans }: MyHistoryProps) {
           <CardHeader className="px-6 py-4">
             <CardTitle className="text-lg">Riwayat Peminjaman Anda</CardTitle>
             <CardDescription>
-              {totalLoans} peminjaman ditemukan dalam riwayat Anda
+              Menampilkan {loans.from} - {loans.to} dari {loans.total} peminjaman
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -235,14 +289,15 @@ export default function MyHistory({ loans }: MyHistoryProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loans.length > 0 ? (
-                  loans.map((loan, index) => {
+                {loans.data.length > 0 ? (
+                  loans.data.map((loan, index) => {
                     const daysRemaining = getDaysRemaining(loan.due_date);
                     const isOverdue = daysRemaining < 0 && loan.status === 'approved';
-                    
+                    const rowNumber = (loans.current_page - 1) * parseInt(perPage) + index + 1;
+
                     return (
                       <TableRow key={loan.id} className="hover:bg-muted/50">
-                        <TableCell className="font-medium">{index + 1}</TableCell>
+                        <TableCell className="font-medium">{rowNumber}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -291,8 +346,8 @@ export default function MyHistory({ loans }: MyHistoryProps) {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge 
-                            variant={getStatusVariant(loan.status)} 
+                          <Badge
+                            variant={getStatusVariant(loan.status)}
                             className="capitalize gap-1"
                           >
                             {getStatusIcon(loan.status)}
@@ -323,30 +378,73 @@ export default function MyHistory({ loans }: MyHistoryProps) {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        {activeLoans > 0 && (
-          <Card>
-            <CardHeader className="px-6 py-4">
-              <CardTitle className="text-lg">Peminjaman Aktif</CardTitle>
-              <CardDescription>
-                Anda memiliki {activeLoans} barang yang sedang dipinjam
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    Pastikan untuk mengembalikan barang sebelum jatuh tempo untuk menghindari denda.
-                  </p>
-                </div>
-                <Button variant="outline">
-                  Lihat Detail Peminjaman Aktif
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Pagination Controls */}
+        {loans.last_page > 1 && (
+          <div className="flex justify-center mt-4">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (loans.current_page > 1) {
+                        router.visit(loans.links[0].url || window.location.href, { preserveScroll: true, preserveState: true, data: { page: loans.current_page - 1 } });
+                      }
+                    }}
+                    className={loans.current_page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+
+                {loans.links.filter(link => !link.label.includes('&laquo;') && !link.label.includes('&raquo;')).map((link, i) => {
+                  const pageNum = parseInt(link.label);
+                  // Show first, last, current, and surrounding pages
+                  if (
+                    isNaN(pageNum) ||
+                    pageNum === 1 ||
+                    pageNum === loans.last_page ||
+                    (pageNum >= loans.current_page - 1 && pageNum <= loans.current_page + 1)
+                  ) {
+                    return (
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          href={link.url || '#'}
+                          isActive={link.active}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (link.url) router.visit(link.url, { preserveScroll: true, preserveState: true });
+                          }}
+                        >
+                          {link.label}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  } else if (
+                    (pageNum === loans.current_page - 2 && pageNum > 1) ||
+                    (pageNum === loans.current_page + 2 && pageNum < loans.last_page)
+                  ) {
+                    return <PaginationItem key={i}><PaginationEllipsis /></PaginationItem>;
+                  }
+                  return null;
+                })}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (loans.current_page < loans.last_page) {
+                        router.visit(loans.links[loans.links.length - 1].url || window.location.href, { preserveScroll: true, preserveState: true, data: { page: loans.current_page + 1 } });
+                      }
+                    }}
+                    className={loans.current_page === loans.last_page ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
         )}
       </div>
-    </AppLayout>
+    </AppLayout >
   );
 }

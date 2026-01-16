@@ -8,12 +8,12 @@ import { Head, usePage } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  Package, 
-  PackageCheck, 
-  PackageX, 
-  TrendingUp, 
-  Clock, 
+import {
+  Package,
+  PackageCheck,
+  PackageX,
+  TrendingUp,
+  Clock,
   AlertTriangle,
   Users,
   Calendar,
@@ -95,37 +95,37 @@ const breadcrumbs: BreadcrumbItem[] = [
 const loanTrendsConfig = {
   Peminjaman: {
     label: "Total Peminjaman",
-    color: "var(--chart-1)",
+    color: "#2563eb", // blue-600
   },
-} as const
+} as const;
 
 const popularItemsConfig = {
-  value: {
+  total: {
     label: "Total Dipinjam",
-    color: "var(--chart-2)",
+    color: "#8b5cf6", // violet-500
   },
-} as const
+} as const;
 
 const statusConfig = {
-  Tersedia: {
+  available: {
     label: "Tersedia",
-    color: "var(--chart-2)",
+    color: "#22c55e", // green-500
   },
-  Dipinjam: {
+  borrowed: {
     label: "Dipinjam",
-    color: "var(--chart-3)",
+    color: "#f59e0b", // amber-500
   },
-  Tidak_Tersedia: {
+  damaged: {
     label: "Tidak Tersedia",
-    color: "var(--chart-4)",
+    color: "#ef4444", // red-500
   },
-} as const
+} as const;
 
 export default function Dashboard() {
   const [exportLoading, setExportLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<"90d" | "30d" | "7d">("30d");
   const [popularItemsRange, setPopularItemsRange] = useState<"all" | "month" | "week">("month");
-  
+
   const {
     summary = { total: 0, available: 0, borrowed: 0, damaged: 0 },
     upcomingDue = [],
@@ -142,60 +142,51 @@ export default function Dashboard() {
   }));
 
   // Filter loan trends based on time range
-  const filteredLoanTrends = loanTrendsData.filter((item: { date: string | number | Date; }, idx: number, arr: typeof loanTrendsData) => {
+  const filteredLoanTrends = loanTrendsData.filter((item, idx, arr) => {
     const date = new Date(item.date);
     const referenceDate = new Date();
     let monthsToSubtract = 3;
-    
+
     if (timeRange === "30d") {
       monthsToSubtract = 1;
     } else if (timeRange === "7d") {
       // Only include the last 7 entries
       return idx >= arr.length - 7;
     }
-    
+
     const startDate = new Date(referenceDate);
     startDate.setMonth(startDate.getMonth() - monthsToSubtract);
     return date >= startDate;
   });
 
-  // Prepare popular items data
+  // Prepare popular items data - Simplified for shadcn chart
   const popularItemsData = popularItems.slice(0, 6).map((item, index) => ({
-    name: item.item.name.length > 15 
-      ? item.item.name.substring(0, 15) + '...' 
+    name: item.item.name.length > 15
+      ? item.item.name.substring(0, 15) + '...'
       : item.item.name,
     fullName: item.item.name,
-    value: item.total,
-    fill: `var(--chart-${(index % 5) + 1})`
+    total: item.total,
+    fill: ["#2563eb", "#8b5cf6", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4"][index % 6] // Cycle appropriate hex colors
   }));
 
-  // Status distribution data
+  // Status distribution data - mapped to config keys
   const statusData = [
-    { name: 'Tersedia', value: summary.available, color: 'var(--chart-2)' },
-    { name: 'Dipinjam', value: summary.borrowed, color: 'var(--chart-3)' },
-    { name: 'Tidak_Tersedia', value: summary.damaged, color: 'var(--chart-4)' },
+    { status: 'available', value: summary.available, fill: '#22c55e' }, // green-500
+    { status: 'borrowed', value: summary.borrowed, fill: '#f59e0b' },   // amber-500
+    { status: 'damaged', value: summary.damaged, fill: '#ef4444' },     // red-500
   ];
 
   const handleExport = (type: 'items' | 'loans' | 'dashboard') => {
     setExportLoading(true);
-    
+
     try {
       let url = '';
-      
       switch (type) {
-        case 'items':
-          url = '/export/items';
-          break;
-        case 'loans':
-          url = '/export/loans';
-          break;
-        case 'dashboard':
-          url = '/export/dashboard';
-          break;
+        case 'items': url = '/export/items'; break;
+        case 'loans': url = '/export/loans'; break;
+        case 'dashboard': url = '/export/dashboard'; break;
       }
-      
       window.location.href = url;
-      
     } catch (error) {
       console.error('Export failed:', error);
       alert('Gagal mengekspor data. Silakan coba lagi.');
@@ -255,44 +246,25 @@ export default function Dashboard() {
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className="gap-2" 
+                  <Button
+                    variant="outline"
+                    className="gap-2"
                     disabled={exportLoading}
                   >
                     <Download className="h-4 w-4" />
-                    {exportLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                        Mengekspor...
-                      </>
-                    ) : (
-                      'Export Data'
-                    )}
+                    {exportLoading ? 'Mengekspor...' : 'Export Data'}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem 
-                    onClick={() => handleExport('dashboard')}
-                    className="gap-2 cursor-pointer"
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                    Export Dashboard
+                  <DropdownMenuItem onClick={() => handleExport('dashboard')} className="gap-2 cursor-pointer">
+                    <BarChart3 className="h-4 w-4" /> Export Dashboard
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => handleExport('items')}
-                    className="gap-2 cursor-pointer"
-                  >
-                    <Package className="h-4 w-4" />
-                    Export Data Barang
+                  <DropdownMenuItem onClick={() => handleExport('items')} className="gap-2 cursor-pointer">
+                    <Package className="h-4 w-4" /> Export Data Barang
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    onClick={() => handleExport('loans')}
-                    className="gap-2 cursor-pointer"
-                  >
-                    <Users className="h-4 w-4" />
-                    Export Data Peminjaman
+                  <DropdownMenuItem onClick={() => handleExport('loans')} className="gap-2 cursor-pointer">
+                    <Users className="h-4 w-4" /> Export Data Peminjaman
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -302,7 +274,7 @@ export default function Dashboard() {
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {statsCards.map((stat, index) => (
+          {statsCards.map((stat) => (
             <Card key={stat.title} className="relative overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -314,9 +286,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stat.description}
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
               </CardContent>
             </Card>
           ))}
@@ -324,7 +294,7 @@ export default function Dashboard() {
 
         {/* Main Charts Section */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Loan Trends - Interactive Area Chart */}
+          {/* Loan Trends - Area Chart */}
           <Card>
             <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
               <div className="grid flex-1 gap-1">
@@ -336,23 +306,14 @@ export default function Dashboard() {
                   Aktivitas peminjaman dalam periode tertentu
                 </CardDescription>
               </div>
-              <Select value={timeRange} onValueChange={(value: "90d" | "30d" | "7d") => setTimeRange(value)}>
-                <SelectTrigger
-                  className="w-[160px] rounded-lg sm:ml-auto"
-                  aria-label="Select time range"
-                >
+              <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
+                <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto">
                   <SelectValue placeholder="Pilih periode" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="90d" className="rounded-lg">
-                    3 Bulan Terakhir
-                  </SelectItem>
-                  <SelectItem value="30d" className="rounded-lg">
-                    30 Hari Terakhir
-                  </SelectItem>
-                  <SelectItem value="7d" className="rounded-lg">
-                    7 Hari Terakhir
-                  </SelectItem>
+                  <SelectItem value="90d">3 Bulan Terakhir</SelectItem>
+                  <SelectItem value="30d">30 Hari Terakhir</SelectItem>
+                  <SelectItem value="7d">7 Hari Terakhir</SelectItem>
                 </SelectContent>
               </Select>
             </CardHeader>
@@ -362,23 +323,12 @@ export default function Dashboard() {
                   <PlaceholderPattern />
                 </div>
               ) : (
-                <ChartContainer
-                  config={loanTrendsConfig}
-                  className="aspect-auto h-64 w-full"
-                >
+                <ChartContainer config={loanTrendsConfig} className="aspect-auto h-64 w-full">
                   <AreaChart data={filteredLoanTrends}>
                     <defs>
                       <linearGradient id="fillPeminjaman" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="5%"
-                          stopColor="var(--color-Peminjaman)"
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="var(--color-Peminjaman)"
-                          stopOpacity={0.1}
-                        />
+                        <stop offset="5%" stopColor="var(--color-Peminjaman)" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="var(--color-Peminjaman)" stopOpacity={0.1} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} />
@@ -388,41 +338,24 @@ export default function Dashboard() {
                       axisLine={false}
                       tickMargin={8}
                       minTickGap={32}
-                      tickFormatter={(value) => {
-                        return value
-                      }}
                     />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                    />
-                    <ChartTooltip
-                      cursor={false}
-                      content={
-                        <ChartTooltipContent
-                          labelFormatter={(value) => {
-                            return value
-                          }}
-                          indicator="dot"
-                        />
-                      }
-                    />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
+                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                     <Area
                       dataKey="Peminjaman"
                       type="natural"
                       fill="url(#fillPeminjaman)"
+                      fillOpacity={0.4}
                       stroke="var(--color-Peminjaman)"
-                      strokeWidth={2}
+                      stackId="a"
                     />
-                    <ChartLegend content={<ChartLegendContent />} />
                   </AreaChart>
                 </ChartContainer>
               )}
             </CardContent>
           </Card>
 
-          {/* Popular Items - Interactive Bar Chart */}
+          {/* Popular Items - Bar Chart */}
           <Card>
             <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
               <div className="grid flex-1 gap-1">
@@ -434,23 +367,14 @@ export default function Dashboard() {
                   Barang paling sering dipinjam
                 </CardDescription>
               </div>
-              <Select value={popularItemsRange} onValueChange={(value: "all" | "month" | "week") => setPopularItemsRange(value)}>
-                <SelectTrigger
-                  className="w-[160px] rounded-lg sm:ml-auto"
-                  aria-label="Select time range"
-                >
+              <Select value={popularItemsRange} onValueChange={(value: any) => setPopularItemsRange(value)}>
+                <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto">
                   <SelectValue placeholder="Pilih periode" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="all" className="rounded-lg">
-                    Semua Waktu
-                  </SelectItem>
-                  <SelectItem value="month" className="rounded-lg">
-                    Bulan Ini
-                  </SelectItem>
-                  <SelectItem value="week" className="rounded-lg">
-                    Minggu Ini
-                  </SelectItem>
+                  <SelectItem value="all">Semua Waktu</SelectItem>
+                  <SelectItem value="month">Bulan Ini</SelectItem>
+                  <SelectItem value="week">Minggu Ini</SelectItem>
                 </SelectContent>
               </Select>
             </CardHeader>
@@ -460,45 +384,26 @@ export default function Dashboard() {
                   <PlaceholderPattern />
                 </div>
               ) : (
-                <ChartContainer
-                  config={popularItemsConfig}
-                  className="aspect-auto h-64 w-full"
-                >
-                  <BarChart
-                    data={popularItemsData}
-                    layout="vertical"
-                    margin={{ top: 10, right: 30, left: 100, bottom: 10 }}
-                  >
-                    <CartesianGrid horizontal={true} vertical={false} />
-                    <XAxis 
-                      type="number" 
-                      axisLine={false}
+                <ChartContainer config={popularItemsConfig} className="aspect-auto h-64 w-full">
+                  <BarChart data={popularItemsData} layout="vertical" margin={{ left: 0 }}>
+                    <CartesianGrid horizontal={false} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
                       tickLine={false}
-                    />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
                       axisLine={false}
-                      tickLine={false}
-                      width={90}
+                      width={100}
                     />
+                    <XAxis type="number" hide />
                     <ChartTooltip
-                      cursor={{ fill: 'transparent' }}
-                      content={
-                        <ChartTooltipContent
-                          labelFormatter={(value, payload) => {
-                            const item = payload?.[0]?.payload;
-                            return item?.fullName || value;
-                          }}
-                        />
-                      }
+                      cursor={false}
+                      content={<ChartTooltipContent indicator="dashed" />}
                     />
-                    <Bar 
-                      dataKey="value" 
-                      fill="var(--color-value)"
-                      radius={[0, 4, 4, 0]}
+                    <Bar
+                      dataKey="total"
+                      fill="var(--color-total)"
+                      radius={4}
                     />
-                    <ChartLegend content={<ChartLegendContent />} />
                   </BarChart>
                 </ChartContainer>
               )}
@@ -509,8 +414,8 @@ export default function Dashboard() {
         {/* Status Distribution and Recent Activity */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Status Distribution - Pie Chart */}
-          <Card>
-            <CardHeader>
+          <Card className="flex flex-col">
+            <CardHeader className="items-center pb-0">
               <CardTitle className="flex items-center gap-2 text-foreground">
                 <Package className="h-5 w-5 text-muted-foreground" />
                 Status Barang
@@ -519,60 +424,19 @@ export default function Dashboard() {
                 Distribusi status inventaris
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ChartContainer
-                  config={statusConfig}
-                  className="h-full w-full"
-                >
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {statusData.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={entry.color}
-                          stroke="var(--background)"
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </Pie>
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          hideLabel
-                        />
-                      }
-                    />
-                    <ChartLegend 
-                      content={<ChartLegendContent />}
-                      verticalAlign="bottom"
-                      height={36}
-                    />
-                  </PieChart>
-                </ChartContainer>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center mt-4">
-                {statusData.map((item, index) => (
-                  <div key={item.name} className="text-center">
-                    <div 
-                      className="w-3 h-3 rounded-full mx-auto mb-1"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {item.name.replace('_', ' ')}
-                    </p>
-                    <p className="text-lg font-bold text-foreground">{item.value}</p>
-                  </div>
-                ))}
-              </div>
+            <CardContent className="flex-1 pb-0">
+              <ChartContainer config={statusConfig} className="mx-auto aspect-square max-h-[250px]">
+                <PieChart>
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                  <Pie
+                    data={statusData}
+                    dataKey="value"
+                    nameKey="status"
+                    innerRadius={60}
+                    strokeWidth={5}
+                  />
+                </PieChart>
+              </ChartContainer>
             </CardContent>
           </Card>
 

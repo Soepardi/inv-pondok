@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import users from '@/routes/users';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,17 +27,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+interface Institution {
+  id: number;
+  name: string;
+}
+
 interface User {
-  destroy(id: number): unknown;
   id: number;
   name: string;
   email: string;
   password?: string;
   role: 'admin' | 'user';
+  institution_id?: number | null;
 }
 
 interface UsersProps {
   users: User[];
+  institutions: Institution[];
   flash: { success?: string; error?: string };
 }
 
@@ -56,13 +62,18 @@ const getRoleText = (role: string) => {
   return role === 'admin' ? 'Administrator' : 'User';
 };
 
-export default function UserManagement({ users: data, flash }: UsersProps) {
+export default function UserManagement({ users: data, institutions, flash }: UsersProps) {
+  const { auth } = usePage().props as unknown as { auth: { user: { id: number } } };
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
 
   const handleDelete = (user: User) => {
+    if (user.id === auth.user.id) {
+      alert("Anda tidak dapat menghapus akun sendiri.");
+      return;
+    }
     if (confirm(`Yakin menghapus user "${user.name}"?`)) {
-      const result = user.destroy(user.id) as { url: string };
+      const result = users.destroy(user.id);
       router.delete(result.url);
     }
   };
@@ -73,7 +84,7 @@ export default function UserManagement({ users: data, flash }: UsersProps) {
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Manajemen User" />
-      
+
       <div className="container mx-auto py-6 space-y-6 p-4">
         {/* Header */}
         <div className="flex flex-col gap-2">
@@ -194,14 +205,18 @@ export default function UserManagement({ users: data, flash }: UsersProps) {
                           <Pencil className="h-4 w-4 mr-2" />
                           Edit User
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleDelete(user)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Hapus User
-                        </DropdownMenuItem>
+                        {user.id !== auth.user.id && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(user)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Hapus User
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -216,6 +231,12 @@ export default function UserManagement({ users: data, flash }: UsersProps) {
                       <Shield className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground capitalize">{user.role}</span>
                     </div>
+                    {user.role === 'admin' && user.institution_id && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <div className="h-4 w-4 text-muted-foreground flex items-center justify-center font-bold text-xs border rounded-sm">I</div>
+                        <span className="text-muted-foreground"> Institution ID: {user.institution_id}</span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter className="pt-3 border-t">
@@ -229,15 +250,17 @@ export default function UserManagement({ users: data, flash }: UsersProps) {
                       <Pencil className="h-3 w-3" />
                       Edit
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleDelete(user)}
-                      className="flex-1 gap-2"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Hapus
-                    </Button>
+                    {user.id !== auth.user.id && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDelete(user)}
+                        className="flex-1 gap-2"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Hapus
+                      </Button>
+                    )}
                   </div>
                 </CardFooter>
               </Card>
@@ -299,12 +322,14 @@ export default function UserManagement({ users: data, flash }: UsersProps) {
           open={showCreate}
           onClose={() => setShowCreate(false)}
           users={data}
+          institutions={institutions}
         />
         {editUser && (
           <EditUserDialog
             open={!!editUser}
             onClose={() => setEditUser(null)}
             user={editUser}
+            institutions={institutions}
           />
         )}
       </div>

@@ -1,4 +1,3 @@
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -7,97 +6,82 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuButton,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import {
-  BookOpen,
-  Folder,
   LayoutGrid,
   Package,
   Users,
   ClipboardList,
-  Undo2,
-  History,
   Building2,
+  History,
 } from 'lucide-react';
-import AppLogo from './app-logo';
-
-// routes
-import items from '@/routes/items';
-import users from '@/routes/users';
-import institutions from '@/routes/institutions';
-import loans from '@/routes/loans';
-import history from '@/routes/history';
-
-// menu untuk admin
-const adminNavItems: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: dashboard(),
-    icon: LayoutGrid,
-  },
-  {
-    title: 'Manajemen Barang',
-    href: items.index(),
-    icon: Package,
-  },
-  {
-    title: 'Manajemen User',
-    href: users.index(),
-    icon: Users,
-  },
-  {
-    title: 'Manajemen Instansi',
-    href: institutions.index(),
-    icon: Building2,
-  },
-  {
-    title: 'Persetujuan',
-    href: '/loans/all',
-    icon: ClipboardList,
-  },
-];
-
-// menu untuk user biasa
-const userNavItems: NavItem[] = [
-  {
-    title: 'Ajukan Peminjaman',
-    href: loans.create(),
-    icon: ClipboardList,
-  },
-  {
-    title: 'Riwayat Saya',
-    href: history.my(),
-    icon: History,
-  },
-];
-
-// menu footer (global)
-const footerNavItems: NavItem[] = [
-
-];
+import AppLogoIcon from '@/components/app-logo-icon';
 
 export function AppSidebar() {
-  const { auth } = usePage().props as unknown as {
-    auth: { user: { role: string } };
-  };
+  const { auth } = usePage().props as any;
+  const user = auth.user;
 
-  // tentukan menu berdasarkan role
-  const mainNavItems =
-    auth.user?.role === 'admin' ? adminNavItems : userNavItems;
+  const navMain: NavItem[] = [];
+
+  if (user?.role === 'admin') {
+    navMain.push({
+      title: 'Dashboard',
+      href: dashboard().url,
+      icon: LayoutGrid,
+    });
+    navMain.push({
+      title: 'Manajemen Barang',
+      href: '/items',
+      icon: Package,
+    });
+
+    if (!user.institution_id) {
+      navMain.push({
+        title: 'Manajemen User',
+        href: '/users',
+        icon: Users,
+      });
+      navMain.push({
+        title: 'Manajemen Instansi',
+        href: '/institutions',
+        icon: Building2,
+      });
+    }
+
+    navMain.push({
+      title: 'Persetujuan',
+      href: '/loans/all',
+      icon: ClipboardList,
+    });
+  } else {
+    navMain.push({
+      title: 'Ajukan Peminjaman',
+      href: '/loans/create',
+      icon: ClipboardList,
+    });
+    navMain.push({
+      title: 'Riwayat Saya',
+      href: '/history/my',
+      icon: History,
+    });
+  }
 
   return (
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href={dashboard()} prefetch>
-                <AppLogo />
+              <Link href={user?.role === 'admin' ? dashboard().url : '/loans'} className="flex items-center gap-2">
+                <AppLogoIcon className="h-8 w-8 object-contain shrink-0" />
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-bold text-base text-sidebar-foreground group-data-[collapsible=icon]:hidden">Inventaris PTM</span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -105,11 +89,10 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain items={mainNavItems} />
+        <NavMain items={navMain} />
       </SidebarContent>
 
       <SidebarFooter>
-        <NavFooter items={footerNavItems} className="mt-auto" />
         <NavUser />
       </SidebarFooter>
     </Sidebar>

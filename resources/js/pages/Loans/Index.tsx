@@ -14,7 +14,7 @@ import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { usePage } from "@inertiajs/react";
 import {
@@ -33,10 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  Search, 
-  Clipboard, 
-  Download, 
+import {
+  Search,
+  Clipboard,
+  Download,
   Upload,
   X,
   CheckCircle2,
@@ -46,6 +46,20 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+
 
 interface Loan {
   id: number;
@@ -74,7 +88,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Semua Status' },
-  { value: 'pending', label: 'Menunggu Persetujuan' },
+  { value: 'pending', label: 'Pending' },
   { value: 'approved', label: 'Disetujui' },
   { value: 'returned', label: 'Dikembalikan' },
   { value: 'rejected', label: 'Ditolak' },
@@ -93,7 +107,7 @@ const getStatusVariant = (status: string) => {
 const getStatusText = (status: string) => {
   switch (status) {
     case 'approved': return 'Disetujui';
-    case 'pending': return 'Menunggu';
+    case 'pending': return 'Pending';
     case 'returned': return 'Dikembalikan';
     case 'rejected': return 'Ditolak';
     default: return status;
@@ -110,23 +124,44 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-export default function LoanIndex({ 
-  loans, 
-  current_page, 
-  last_page, 
-  total, 
-  from, 
+interface PageProps {
+  [key: string]: unknown;
+  auth: {
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      role: string;
+    };
+  };
+  flash: {
+    success?: string;
+  };
+}
+
+export default function LoanIndex({
+  loans,
+  current_page,
+  last_page,
+  total,
+  from,
   to,
-  per_page 
+  per_page
 }: LoanIndexProps) {
   const [fileUploads, setFileUploads] = useState<Record<number, File | null>>({});
   const [processingLoan, setProcessingLoan] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [perPage, setPerPage] = useState(String(per_page ?? 10));
+  const [selectedLoans, setSelectedLoans] = useState<number[]>([]);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'approve' | 'reject' | 'delete' | null>(null);
 
-  const { props } = usePage();
-  const flash = props.flash as { success?: string };
+  const { props } = usePage<PageProps>();
+  const flash = props.flash;
+  const user = props.auth.user;
+
+
 
   // Debounce search
   useEffect(() => {
@@ -135,31 +170,36 @@ export default function LoanIndex({
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, statusFilter, perPage]);
+  }, [statusFilter, perPage]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    applyFilters();
+  };
 
   const applyFilters = () => {
     const url = new URL(window.location.href);
-    
+
     if (searchTerm) {
       url.searchParams.set('search', searchTerm);
     } else {
       url.searchParams.delete('search');
     }
-    
+
     if (statusFilter !== 'all') {
       url.searchParams.set('status', statusFilter);
     } else {
       url.searchParams.delete('status');
     }
-    
+
     if (perPage !== '10') {
       url.searchParams.set('per_page', perPage);
     } else {
       url.searchParams.delete('per_page');
     }
-    
+
     url.searchParams.set('page', '1');
-    
+
     router.visit(url.toString(), { preserveState: true });
   };
 
@@ -187,7 +227,10 @@ export default function LoanIndex({
 
   const handleReturn = (id: number) => {
     const file = fileUploads[id];
-    if (!file) return alert("Upload bukti foto dulu!");
+    if (!file) {
+      toast.error("Upload bukti foto dulu!");
+      return;
+    }
 
     setProcessingLoan(id);
 
@@ -203,7 +246,7 @@ export default function LoanIndex({
       },
       onError: (errors) => {
         console.error(errors);
-        alert("Gagal memproses pengembalian.");
+        toast.error("Gagal memproses pengembalian.");
       },
       onFinish: () => setProcessingLoan(null),
     });
@@ -212,6 +255,53 @@ export default function LoanIndex({
   const handleFileChange = (id: number, file: File | null) => {
     setFileUploads(prev => ({ ...prev, [id]: file }));
   };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedLoans(loans.map(l => l.id));
+    } else {
+      setSelectedLoans([]);
+    }
+  };
+
+  const toggleSelectOne = (id: number, checked: boolean) => {
+    if (checked) {
+      setSelectedLoans(prev => [...prev, id]);
+    } else {
+      setSelectedLoans(prev => prev.filter(loanId => loanId !== id));
+    }
+  };
+
+  const handleMassAction = (action: 'approve' | 'reject' | 'delete') => {
+    if (selectedLoans.length === 0) return;
+    setPendingAction(action);
+    setIsConfirmOpen(true);
+  };
+
+  const confirmMassAction = () => {
+    if (!pendingAction) return;
+
+    router.post(loansRoute.mass_action().url, {
+      loan_ids: selectedLoans,
+      action: pendingAction
+    }, {
+      preserveState: true,
+      onSuccess: () => {
+        setSelectedLoans([]);
+        toast.success(`Berhasil melakukan aksi massal (${pendingAction})`);
+      },
+      onFinish: () => {
+        setSelectedLoans([]);
+        setIsConfirmOpen(false);
+        setPendingAction(null);
+      },
+      onError: () => {
+        toast.error("Gagal melakukan aksi massal.");
+        setIsConfirmOpen(false);
+      }
+    });
+  };
+
 
   const exportToExcel = () => {
     const url = new URL(window.location.href);
@@ -257,7 +347,7 @@ export default function LoanIndex({
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Daftar Peminjaman" />
-      
+
       <div className="container mx-auto py-6 space-y-6 p-4">
         {/* Header */}
         <div className="flex flex-col gap-2">
@@ -284,65 +374,65 @@ export default function LoanIndex({
           </Alert>
         )}
 
-        {/* Filters Card */}
+        {/* Streamlined Filters Toolbar */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-4 flex-1">
-                {/* Search Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="search">Cari</Label>
-                  <div className="relative w-full sm:w-64">
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {/* Left Side: Search & Primary Action */}
+              <div className="flex flex-1 items-center gap-2 w-full md:max-w-md">
+                <form onSubmit={handleSearch} className="flex flex-1 gap-2 items-center w-full">
+                  <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="search"
-                      placeholder="Barang atau user..."
+                      placeholder="Cari barang atau user..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-9"
                     />
                   </div>
-                </div>
-
-                {/* Status Filter */}
-                <div className="space-y-2">
-                  <Label htmlFor="status-filter">Status</Label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full sm:w-48" id="status-filter">
-                      <SelectValue placeholder="Filter Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Items Per Page */}
-                <div className="space-y-2">
-                  <Label htmlFor="per-page">Per Halaman</Label>
-                  <Select value={perPage} onValueChange={setPerPage}>
-                    <SelectTrigger className="w-20" id="per-page">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <Button type="submit" className="gap-2 shrink-0">
+                    <Search className="h-4 w-4" />
+                    <span className="hidden sm:inline">Cari</span>
+                  </Button>
+                </form>
               </div>
 
-              {/* Export Button */}
-              <Button variant="outline" onClick={exportToExcel} className="gap-2">
-                <Download className="h-4 w-4" />
-                Export Excel
-              </Button>
+              {/* Right Side: Filters & Actions */}
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                {/* Status Filter */}
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Filter Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Per Page Selector */}
+                <Select value={perPage} onValueChange={setPerPage}>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="15">15</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Export Button */}
+                <Button variant="outline" onClick={exportToExcel} className="gap-2 shrink-0" title="Export Excel">
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -369,7 +459,7 @@ export default function LoanIndex({
                   <p className="text-2xl font-bold text-orange-600">
                     {loans.filter(loan => loan.status === 'pending').length}
                   </p>
-                  <p className="text-sm text-muted-foreground">Menunggu Persetujuan</p>
+                  <p className="text-sm text-muted-foreground">Pending</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
                   <Clock className="h-5 w-5 text-orange-600" />
@@ -413,12 +503,26 @@ export default function LoanIndex({
         <Card>
           <CardHeader className="px-6 py-4">
             <CardTitle className="text-lg">Data Peminjaman</CardTitle>
+            <CardDescription>
+              Menampilkan {from} sampai {to} dari {total} peminjaman
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* Checkbox Column for Admin */}
+                  {user.role === 'admin' && (
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={loans.length > 0 && selectedLoans.length === loans.length}
+                        onCheckedChange={(checked) => toggleSelectAll(!!checked)}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Barang</TableHead>
+                  <TableHead>Deskripsi</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Tanggal Pinjam</TableHead>
                   <TableHead>Jatuh Tempo</TableHead>
@@ -431,13 +535,28 @@ export default function LoanIndex({
                 {loans.length > 0 ? loans.map((loan, index) => {
                   const file = fileUploads[loan.id];
                   const rowNumber = (current_page - 1) * parseInt(perPage) + index + 1;
-                  
+
                   return (
                     <TableRow key={loan.id}>
+                      {/* Checkbox Cell for Admin */}
+                      {user.role === 'admin' && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedLoans.includes(loan.id)}
+                            onCheckedChange={(checked) => toggleSelectOne(loan.id, !!checked)}
+                            aria-label={`Select loan ${loan.id}`}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div>
                           <div className="font-medium">{loan.item?.name}</div>
                           <div className="text-xs text-muted-foreground">{loan.item?.item_code}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-[200px] truncate" title={loan.notes}>
+                          {loan.notes ?? '-'}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -456,8 +575,8 @@ export default function LoanIndex({
                         {loan.return_date ? new Date(loan.return_date).toLocaleDateString('id-ID') : '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge 
-                          variant={getStatusVariant(loan.status)} 
+                        <Badge
+                          variant={getStatusVariant(loan.status)}
                           className="capitalize gap-1"
                         >
                           {getStatusIcon(loan.status)}
@@ -546,13 +665,13 @@ export default function LoanIndex({
                   );
                 }) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={9} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <PackageCheck className="h-8 w-8" />
                         <div>Tidak ada data peminjaman</div>
                         <div className="text-sm">
-                          {searchTerm || statusFilter !== 'all' 
-                            ? 'Coba ubah pencarian atau filter' 
+                          {searchTerm || statusFilter !== 'all'
+                            ? 'Coba ubah pencarian atau filter'
                             : 'Semua peminjaman telah diproses'
                           }
                         </div>
@@ -565,16 +684,33 @@ export default function LoanIndex({
           </CardContent>
         </Card>
 
-        {/* Pagination */}
-        {last_page > 1 && (
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Menampilkan {from} sampai {to} dari {total} peminjaman
-            </p>
+        {/* Mass Action Floating Bar */}
+        {selectedLoans.length > 0 && user.role === 'admin' && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white dark:bg-zinc-900 border shadow-lg rounded-full px-6 py-3 flex items-center gap-4 z-50">
+            <span className="text-sm font-medium">{selectedLoans.length} dipilih</span>
+            <div className="h-4 w-[1px] bg-border" />
+            <Button size="sm" onClick={() => handleMassAction('approve')} className="rounded-full bg-green-600 hover:bg-green-700 text-white">
+              Approve
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleMassAction('reject')} className="rounded-full bg-orange-100 text-orange-700 hover:bg-orange-200">
+              Reject
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => handleMassAction('delete')} className="rounded-full">
+              Delete
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setSelectedLoans([])} className="rounded-full ml-2 h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {/* Pagination & Limit */}
+        <div className="flex flex-col items-center gap-3 mt-4">
+          {last_page > 1 && (
             <Pagination>
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious 
+                  <PaginationPrevious
                     onClick={(e) => {
                       e.preventDefault();
                       if (current_page > 1) handlePageChange(current_page - 1);
@@ -583,7 +719,7 @@ export default function LoanIndex({
                     size={undefined}
                   />
                 </PaginationItem>
-                
+
                 {generatePagination().map((page, index) => (
                   <PaginationItem key={index}>
                     {page === 'ellipsis' ? (
@@ -603,9 +739,9 @@ export default function LoanIndex({
                     )}
                   </PaginationItem>
                 ))}
-                
+
                 <PaginationItem>
-                  <PaginationNext 
+                  <PaginationNext
                     onClick={(e) => {
                       e.preventDefault();
                       if (current_page < last_page) handlePageChange(current_page + 1);
@@ -616,9 +752,30 @@ export default function LoanIndex({
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
-          </div>
-        )}
+          )}
+
+
+        </div>
+
+        <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Konfirmasi Aksi Massal</AlertDialogTitle>
+              <AlertDialogDescription>
+                Apakah Anda yakin ingin melakukan aksi <strong>{pendingAction}</strong> pada <strong>{selectedLoans.length}</strong> item yang dipilih?
+                Tindakan ini tidak dapat dibatalkan (kecuali reject).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmMassAction} className={pendingAction === 'delete' ? 'bg-red-600 hover:bg-red-700' : ''}>
+                Lanjutkan
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </div>
-    </AppLayout>
+    </AppLayout >
   );
 }

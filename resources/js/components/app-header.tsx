@@ -14,15 +14,9 @@ import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
 import AppLogo from './app-logo';
-import AppLogoIcon from './app-logo-icon';
+import AppLogoIcon from '@/components/app-logo-icon';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+
 
 const rightNavItems: NavItem[] = [
     {
@@ -47,6 +41,16 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const page = usePage<SharedData>();
     const { auth } = page.props;
     const getInitials = useInitials();
+
+    const mainNavItems: NavItem[] = [];
+
+    if (auth.user?.role === 'admin') {
+        mainNavItems.push({
+            title: 'Dashboard',
+            href: dashboard().url,
+            icon: LayoutGrid,
+        });
+    }
     return (
         <>
             <div className="border-b border-sidebar-border/80">
@@ -95,7 +99,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                         </Sheet>
                     </div>
 
-                    <Link href={dashboard()} prefetch className="flex items-center space-x-2">
+                    <Link href={auth.user?.role === 'admin' ? dashboard().url : '/loans'} prefetch className="flex items-center space-x-2">
                         <AppLogo />
                     </Link>
 

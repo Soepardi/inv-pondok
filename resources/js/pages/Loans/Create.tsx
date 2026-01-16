@@ -1,18 +1,18 @@
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { type BreadcrumbItem, type Item } from '@/types';
+import { Head, usePage, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { 
-  Package, 
-  CalendarClock, 
-  Building, 
+import {
+  Package,
+  CalendarClock,
+  Building,
   MapPin,
   Search,
   Filter,
   SlidersHorizontal
 } from 'lucide-react';
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useState, useMemo, useEffect } from 'react';
 import HeadingSmall from '@/components/heading-small';
 import LoanItemDialog from './CreateLoanDialog';
 import { Badge } from '@/components/ui/badge';
@@ -24,23 +24,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-interface Item {
-  item_code: string;
-  id: number;
-  name: string;
-  description?: string;
-  price: number;
-  stock?: number;
-  location: string;
-  status: string;
-  condition: string;
-  institution?: { id: number; name: string };
-  photo: null;
-}
+
 
 interface LoanProps {
-  items: Item[];
+  items: {
+    data: Item[];
+    current_page: number;
+    last_page: number;
+    from: number;
+    to: number;
+    total: number;
+    links: Array<{ url: string | null; label: string; active: boolean }>;
+  };
+  institutions: Array<{ id: number; name: string; }>;
+  filters: {
+    search?: string;
+    institution?: string;
+  };
+  per_page: number;
   flash: { success?: string; error?: string };
 }
 
@@ -51,79 +61,68 @@ const breadcrumbs: BreadcrumbItem[] = [
   },
 ];
 
-export default function Loan({ items: data, flash }: LoanProps) {
+export default function Loan({ items, institutions, filters, flash, per_page = 10 }: LoanProps) {
   const [loanItem, setLoanItem] = useState<Item | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [conditionFilter, setConditionFilter] = useState<string>('all');
-  const [institutionFilter, setInstitutionFilter] = useState<string>('all');
-  const [locationFilter, setLocationFilter] = useState<string>('all');
 
-  // Get unique values for filters
-  const institutions = useMemo(() => {
-    const uniqueInstitutions = Array.from(new Set(
-      data
-        .filter(item => item.institution?.name)
-        .map(item => item.institution!.name)
-    ));
-    return uniqueInstitutions.sort();
-  }, [data]);
+  // Initialize filter state from URL params
+  // Use filters prop values as defaults if available, otherwise 'all'
+  const [searchTerm, setSearchTerm] = useState(filters.search || '');
+  const [institutionFilter, setInstitutionFilter] = useState<string>(filters.institution || 'all');
+  const [perPage, setPerPage] = useState(per_page.toString());
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // Backend handles status=baik default, we can keep frontend filter if backend supports it. Note: Controller enforces status=baik in query, so filtering 'rusak' returns nothing. Better validation?
+  // Actually Controller enforces where('status', 'baik'). So status filter is useless. I will remove it.
+  // Wait, step 595 shows: ->where('status', 'baik'). So only 'baik' items are returned.
+  // So "Status" filter in UI is misleading if it offers "Bad".
+  // I will leave it empty/hidden or static.
 
-  const locations = useMemo(() => {
-    const uniqueLocations = Array.from(new Set(
-      data.map(item => item.location)
-    ));
-    return uniqueLocations.sort();
-  }, [data]);
 
-  // Filter items based on search and filters
-  const filteredItems = useMemo(() => {
-    return data.filter(item => {
-      // Search filter
-      const matchesSearch = searchTerm === '' || 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.item_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  // No location filter support in backend yet
 
-      // Status filter
-      const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-
-      // Condition filter
-      const matchesCondition = conditionFilter === 'all' || item.condition === conditionFilter;
-
-      // Institution filter
-      const matchesInstitution = institutionFilter === 'all' || 
-        item.institution?.name === institutionFilter;
-
-      // Location filter
-      const matchesLocation = locationFilter === 'all' || 
-        item.location === locationFilter;
-
-      return matchesSearch && matchesStatus && matchesCondition && 
-             matchesInstitution && matchesLocation;
-    });
-  }, [data, searchTerm, statusFilter, conditionFilter, institutionFilter, locationFilter]);
-
-  // Reset all filters
-  const resetFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('all');
-    setConditionFilter('all');
-    setInstitutionFilter('all');
-    setLocationFilter('all');
+  // No location filter support in backend yet
+  const handleSearch = () => {
+    applyFilters();
   };
 
-  // Check if any filter is active
-  const hasActiveFilters = searchTerm !== '' || 
-    statusFilter !== 'all' || 
-    conditionFilter !== 'all' || 
-    institutionFilter !== 'all' || 
-    locationFilter !== 'all';
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
+  };
+
+  const applyFilters = (overrideParams: Record<string, string> = {}) => {
+    // Current values (or overrides)
+    const currentSearch = 'search' in overrideParams ? overrideParams.search : searchTerm;
+    const currentInst = 'institution' in overrideParams ? overrideParams.institution : institutionFilter;
+    const currentPerPage = 'per_page' in overrideParams ? overrideParams.per_page : perPage;
+
+    router.get(window.location.pathname, {
+      search: currentSearch,
+      institution: currentInst === 'all' ? undefined : currentInst,
+      per_page: currentPerPage,
+    }, {
+      preserveState: true,
+      replace: true,
+      preserveScroll: true,
+    });
+  };
+
+  const handleInstitutionChange = (val: string) => {
+    setInstitutionFilter(val);
+    applyFilters({ institution: val });
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setInstitutionFilter('all');
+    router.visit(route('loans.create'));
+  };
+
+  const hasActiveFilters = (filters.search) || (filters.institution);
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Barang Tersedia" />
-      
+
       <div className="container mx-auto py-6 space-y-6 p-4">
         {/* Header */}
         <div className="flex flex-col gap-2">
@@ -152,131 +151,88 @@ export default function Loan({ items: data, flash }: LoanProps) {
           </div>
         )}
 
-        {/* Search and Filters */}
+        {/* Streamlined Search and Filters Toolbar */}
         <Card>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Cari barang berdasarkan nama, kode, atau deskripsi..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {/* Left Side: Search & Primary Action */}
+              <div className="flex flex-1 items-center gap-2 w-full md:max-w-md">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari nama, kode, atau deskripsi..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="pl-9"
+                  />
+                </div>
+                <Button onClick={handleSearch} className="gap-2 shrink-0">
+                  <Search className="h-4 w-4" />
+                  <span className="hidden sm:inline">Cari</span>
+                </Button>
               </div>
 
-              {/* Filter Controls */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                {/* Status Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Status
-                  </label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Semua Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Status</SelectItem>
-                      <SelectItem value="baik">Baik</SelectItem>
-                      <SelectItem value="rusak">Rusak</SelectItem>
-                      <SelectItem value="perbaikan">Perbaikan</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Condition Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Kondisi
-                  </label>
-                  <Select value={conditionFilter} onValueChange={setConditionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Semua Kondisi" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Kondisi</SelectItem>
-                      <SelectItem value="tersedia">Tersedia</SelectItem>
-                      <SelectItem value="dipinjam">Dipinjam</SelectItem>
-                      <SelectItem value="tidak tersedia">Tidak Tersedia</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
+              {/* Right Side: Filters & Settings */}
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
                 {/* Institution Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Institusi
-                  </label>
-                  <Select value={institutionFilter} onValueChange={setInstitutionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Semua Institusi" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Institusi</SelectItem>
-                      {institutions.map(institution => (
-                        <SelectItem key={institution} value={institution}>
-                          {institution}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select value={institutionFilter} onValueChange={handleInstitutionChange}>
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="Semua Institusi" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Institusi</SelectItem>
+                    {institutions.map(inst => (
+                      <SelectItem key={inst.id} value={inst.id.toString()}>
+                        {inst.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-                {/* Location Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Lokasi
-                  </label>
-                  <Select value={locationFilter} onValueChange={setLocationFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Semua Lokasi" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Lokasi</SelectItem>
-                      {locations.map(location => (
-                        <SelectItem key={location} value={location}>
-                          {location}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Per Page Selector */}
+                <Select
+                  value={perPage}
+                  onValueChange={(value) => {
+                    setPerPage(value);
+                    applyFilters({ per_page: value });
+                  }}
+                >
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder={perPage} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="15">15</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                {/* Reset Filters Button */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground opacity-0">
-                    Reset
-                  </label>
+                {/* Reset */}
+                {hasActiveFilters && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
+                    size="icon"
                     onClick={resetFilters}
-                    disabled={!hasActiveFilters}
-                    className="w-full gap-2"
+                    title="Reset Filter"
+                    className="text-muted-foreground hover:text-foreground shrink-0"
                   >
                     <SlidersHorizontal className="h-4 w-4" />
-                    Reset Filter
                   </Button>
-                </div>
+                )}
               </div>
-
-              {/* Active Filters Badge */}
-              {hasActiveFilters && (
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Menampilkan {filteredItems.length} dari {data.length} barang
-                  </span>
-                  {searchTerm && (
-                    <Badge variant="secondary" className="gap-1">
-                      Pencarian: "{searchTerm}"
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
+
+            {/* Active Filter Badges */}
+            {hasActiveFilters && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Filter className="h-3 w-3" />
+                <span>Filter aktif:</span>
+                {filters.search && <Badge variant="secondary">Search: {filters.search}</Badge>}
+                {filters.institution && <Badge variant="outline">Institusi: {institutions.find(i => i.id.toString() === filters.institution)?.name || 'Custom'}</Badge>}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -285,13 +241,13 @@ export default function Loan({ items: data, flash }: LoanProps) {
           <div>
             <h2 className="text-lg font-semibold">Daftar Barang</h2>
             <p className="text-sm text-muted-foreground">
-              {filteredItems.length} barang ditemukan
+              {items.data.length} dari {items.total} barang ditemukan (Halaman {items.current_page})
             </p>
           </div>
         </div>
 
         {/* Items Grid */}
-        {filteredItems.length === 0 ? (
+        {items.data.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <div className="max-w-md mx-auto space-y-4">
@@ -301,8 +257,8 @@ export default function Loan({ items: data, flash }: LoanProps) {
                 <div className="space-y-2">
                   <h3 className="text-xl font-semibold">Tidak ada barang ditemukan</h3>
                   <p className="text-muted-foreground">
-                    {hasActiveFilters 
-                      ? 'Coba ubah pencarian atau filter yang digunakan' 
+                    {hasActiveFilters
+                      ? 'Coba ubah pencarian atau filter yang digunakan'
                       : 'Tidak ada barang yang tersedia untuk dipinjam'
                     }
                   </p>
@@ -316,101 +272,85 @@ export default function Loan({ items: data, flash }: LoanProps) {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredItems.map((item) => (
-              <Card key={item.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                {/* Item Image/Placeholder */}
-                <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 relative">
-                  {item.photo ? (
-                    <img 
-                      src={`/storage/${item.photo}`} 
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="h-16 w-16 text-gray-400 dark:text-gray-500" />
-                    </div>
-                  )}
-                  
-                  {/* Status Badge */}
-                  <div className="absolute top-3 right-3">
-                    <Badge 
-                      variant={
-                        item.condition === 'tersedia' ? 'default' :
-                        item.condition === 'dipinjam' ? 'secondary' : 'destructive'
-                      }
-                    >
-                      {item.condition}
-                    </Badge>
-                  </div>
-                </div>
+          <>
+            <Card>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">Foto</TableHead>
+                      <TableHead>Nama Barang</TableHead>
+                      <TableHead>Kode</TableHead>
+                      <TableHead>Institusi</TableHead>
+                      <TableHead className="text-center">Stok</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.data.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted flex items-center justify-center">
+                            {item.photo ? (
+                              <img
+                                src={`/storage/${item.photo}`}
+                                alt={item.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {item.description || "Tidak ada deskripsi"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-xs">{item.item_code}</code>
+                        </TableCell>
+                        <TableCell>{item.institution?.name || '---'}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline">{item.stock ?? 0}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            onClick={() => setLoanItem(item)}
+                            disabled={item.condition !== 'tersedia' || item.status !== 'baik' || (item.stock ?? 0) <= 0}
+                            className="gap-2"
+                          >
+                            <CalendarClock className="w-4 h-4" />
+                            Pinjam
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
 
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
-                      <CardTitle className="text-lg line-clamp-1">{item.name}</CardTitle>
-                      <CardDescription className="flex items-center gap-1">
-                        <Building className="h-3 w-3" />
-                        {item.institution?.name || 'Tidak ada institusi'}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-3">
-                  {/* Item Details */}
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground">Kode:</span>
-                      <div className="font-medium">{item.item_code}</div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground">Harga:</span>
-                      <div className="font-medium">Rp {item.price.toLocaleString()}</div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground">Stok:</span>
-                      <div className="font-medium">{item.stock ?? 0}</div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground">Status:</span>
-                      <div className="font-medium capitalize">{item.status}</div>
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground line-clamp-1">{item.location}</span>
-                  </div>
-
-                  {/* Description */}
-                  {item.description && (
-                    <div className="text-sm text-muted-foreground line-clamp-2">
-                      {item.description}
-                    </div>
-                  )}
-
-                  {/* Action Button */}
-                  <div className="pt-2">
+            {/* Pagination Controls */}
+            {items.last_page > 1 && (
+              <div className="flex items-center justify-center gap-2 py-4">
+                <div className="flex gap-1">
+                  {items.links.map((link, i) => (
                     <Button
+                      key={i}
+                      variant={link.active ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setLoanItem(item)}
-                      disabled={item.condition !== 'tersedia' || item.status !== 'baik'}
-                      className="w-full gap-2"
-                    >
-                      <CalendarClock className="w-4 h-4" />
-                      {item.condition === 'tersedia' ? 'Pinjam Barang' : 'Tidak Tersedia'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                      className={`${!link.url ? 'pointer-events-none opacity-50' : ''}`}
+                      onClick={() => link.url && router.visit(link.url, { preserveScroll: true, preserveState: true })}
+                      dangerouslySetInnerHTML={{ __html: link.label }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Loan Dialog */}

@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  Search, 
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
   Package,
   Building,
   BarChart3,
@@ -43,6 +43,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface ItemsProps {
   items: Item[];
@@ -53,6 +61,28 @@ interface ItemsProps {
   total: number;
   from: number;
   to: number;
+  per_page: number;
+  stats: {
+    totalItems: number;
+    availableItems: number;
+    borrowedItems: number;
+    damagedItems: number;
+    totalValue: number;
+    itemsByStatus: {
+      baik: number;
+      rusak: number;
+      diperbaiki: number;
+    };
+    itemsByCondition: {
+      tersedia: number;
+      dipinjam: number;
+      hilang: number;
+    };
+    itemsByInstitution: Array<{
+      name: string;
+      count: number;
+    }>;
+  };
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -79,82 +109,86 @@ function toItemForm(item: Item): ItemForm {
   };
 }
 
-export default function Items({ 
-  items: data, 
-  flash, 
-  institutions, 
+export default function Items({
+  items: data,
+  flash,
+  institutions,
   current_page,
   last_page,
   total,
   from,
-  to
+  to,
+  per_page,
+  stats // Receive stats from backend
 }: ItemsProps) {
+  /* 
+   * LOGIC FIX: 
+   * Previously, this component was doing client-side filtering on `data`. 
+   * However, `data` is paginated (e.g. only 10 items). 
+   * So searching for an item on Page 2 would fail if you were on Page 1.
+   * 
+   * NEW LOGIC:
+   * We will trigger a router visit for search and filters, 
+   * letting the backend handle the query/filtering on the full database.
+   */
+
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedInstitution, setSelectedInstitution] = useState<string>('all');
-  const [filteredItems, setFilteredItems] = useState<Item[]>(data);
 
-  // Calculate statistics
-  const stats = {
-    totalItems: data.length,
-    availableItems: data.filter(item => item.condition === 'tersedia').length,
-    borrowedItems: data.filter(item => item.condition === 'dipinjam').length,
-    damagedItems: data.filter(item => item.status === 'rusak').length,
-    totalValue: data.reduce((sum, item) => sum + (item.price * (item.stock || 1)), 0),
-    averagePrice: data.length > 0 ? data.reduce((sum, item) => sum + item.price, 0) / data.length : 0,
-    itemsByInstitution: institutions.map(inst => ({
-      name: inst.name,
-      count: data.filter(item => item.institution_id === inst.id).length
-    })),
-    itemsByStatus: {
-      baik: data.filter(item => item.status === 'baik').length,
-      rusak: data.filter(item => item.status === 'rusak').length,
-      diperbaiki: data.filter(item => item.status === 'diperbaiki').length,
-    },
-    itemsByCondition: {
-      tersedia: data.filter(item => item.condition === 'tersedia').length,
-      dipinjam: data.filter(item => item.condition === 'dipinjam').length,
-      hilang: data.filter(item => item.condition === 'hilang').length,
-    }
-  };
+  // Initialize state from URL params so they persist on refresh
+  const { url } = usePage();
+  const searchParams = new URLSearchParams(url.split('?')[1]);
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [selectedInstitution, setSelectedInstitution] = useState<string>(searchParams.get('institution') || 'all');
 
-  // Filter items berdasarkan search dan institusi
+  // Debounce search/filter to avoid too many requests
   useEffect(() => {
-    let filtered = data;
-    
-    // Filter berdasarkan search term
-    if (searchTerm) {
-      filtered = filtered.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.item_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.location.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Filter berdasarkan institusi
-    if (selectedInstitution !== 'all') {
-      filtered = filtered.filter(item =>
-        item.institution_id === parseInt(selectedInstitution)
-      );
-    }
-    
-    setFilteredItems(filtered);
-  }, [searchTerm, selectedInstitution, data]);
+    const timer = setTimeout(() => {
+      applyFilters();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [selectedInstitution]);
+
+  // Prevent double-firing on initial mount if not needed, 
+  // but usually safe with Inertia's preserveState
+  const applyFilters = () => {
+    const params = new URLSearchParams();
+
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedInstitution !== 'all') params.set('institution', selectedInstitution);
+    if (per_page !== 10) params.set('per_page', String(per_page));
+
+    // Always reset to page 1 when filter changes, 
+    // unless we are just navigating pages (which is handled by handlePageChange)
+    // Note: The dependency array includes searchTerm/selectedInst, so this runs on their change.
+
+    router.visit(items.index().url + '?' + params.toString(), {
+      preserveState: true,
+      replace: true,
+      preserveScroll: true,
+      only: ['items', 'current_page', 'last_page', 'total', 'from', 'to', 'stats', 'per_page']
+    });
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Trigger filter melalui useEffect
+    applyFilters();
   };
 
   const handlePageChange = (page: number) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('page', page.toString());
-    if (searchTerm) url.searchParams.set('search', searchTerm);
-    if (selectedInstitution !== 'all') url.searchParams.set('institution', selectedInstitution);
-    
-    router.visit(url.toString());
+    const params = new URLSearchParams();
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedInstitution !== 'all') params.set('institution', selectedInstitution);
+    params.set('page', page.toString());
+
+    router.visit(items.index().url + '?' + params.toString(), { preserveState: true });
   };
+
+  /* 
+   * Stats are now passed from the backend, so we don't need to calculate them here anymore.
+   * This fixes the "NaN" issue and ensures stats reflect the full dataset/query.
+   */
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -213,221 +247,231 @@ export default function Items({
       )}
 
       <div className="flex h-full flex-1 flex-col gap-6 p-4">
-        {/* Statistics Overview */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
-          {/* Total Items */}
-          <Card className="col-span-2 md:col-span-1">
-            <CardContent className="p-4">
+        {/* Combined Statistics Grid */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {/* Summary Card */}
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                Ringkasan Inventaris
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {/* Total */}
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-bold">{stats.totalItems}</p>
-                  <p className="text-xs text-muted-foreground">Total Barang</p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Package className="h-4 w-4" />
+                  <span>Total Barang</span>
                 </div>
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Package className="h-5 w-5 text-blue-600" />
+                <span className="font-semibold text-sm">{stats.totalItems}</span>
+              </div>
+
+              {/* Available */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span>Tersedia</span>
                 </div>
+                <span className="font-semibold text-sm text-green-600">{stats.availableItems}</span>
+              </div>
+
+              {/* Borrowed */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4 text-orange-600" />
+                  <span>Dipinjam</span>
+                </div>
+                <span className="font-semibold text-sm text-orange-600">{stats.borrowedItems}</span>
+              </div>
+
+              {/* Damaged */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <span>Rusak</span>
+                </div>
+                <span className="font-semibold text-sm text-red-600">{stats.damagedItems}</span>
+              </div>
+
+              {/* Value */}
+              <div className="pt-2 mt-2 border-t flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <DollarSign className="h-4 w-4 text-purple-600" />
+                  <span>Total Nilai</span>
+                </div>
+                <span className="font-bold text-purple-600 text-sm">Rp {stats.totalValue.toLocaleString()}</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Available Items */}
-          <Card className="col-span-2 md:col-span-1">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-bold text-green-600">{stats.availableItems}</p>
-                  <p className="text-xs text-muted-foreground">Tersedia</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Borrowed Items */}
-          <Card className="col-span-2 md:col-span-1">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-bold text-orange-600">{stats.borrowedItems}</p>
-                  <p className="text-xs text-muted-foreground">Dipinjam</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Damaged Items */}
-          <Card className="col-span-2 md:col-span-1">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-bold text-red-600">{stats.damagedItems}</p>
-                  <p className="text-xs text-muted-foreground">Rusak</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5 text-red-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Total Value */}
-          <Card className="col-span-2 md:col-span-1">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-lg font-bold text-purple-600">
-                    Rp {stats.totalValue.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Total Nilai</p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Detailed Statistics */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Status Distribution */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
+            <CardHeader className="pb-1">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
                 Distribusi Status
               </CardTitle>
-              <CardDescription>
-                Kondisi barang berdasarkan status
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {Object.entries(stats.itemsByStatus).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={getStatusVariant(status)} className="capitalize">
-                      {status}
-                    </Badge>
-                    {getTrendIcon(count, stats.totalItems)}
+            <CardContent className="space-y-4 pt-0">
+              {Object.entries(stats.itemsByStatus).map(([status, count]) => {
+                const percentage = stats.totalItems > 0 ? (count / stats.totalItems) * 100 : 0;
+                let colorClass = "bg-primary";
+                if (status === 'rusak') colorClass = "bg-red-500";
+                if (status === 'diperbaiki') colorClass = "bg-yellow-500";
+                if (status === 'baik') colorClass = "bg-green-500";
+
+                return (
+                  <div key={status} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="capitalize text-muted-foreground">{status}</span>
+                      <span className="font-medium text-xs">{count} ({percentage.toFixed(1)}%)</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${colorClass}`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{count}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {((count / stats.totalItems) * 100).toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
           {/* Condition Distribution */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Package className="h-5 w-5" />
+            <CardHeader className="pb-1">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
                 Distribusi Kondisi
               </CardTitle>
-              <CardDescription>
-                Ketersediaan barang saat ini
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {Object.entries(stats.itemsByCondition).map(([condition, count]) => (
-                <div key={condition} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={getConditionVariant(condition)} className="capitalize">
-                      {condition}
-                    </Badge>
-                    {getTrendIcon(count, stats.totalItems)}
+            <CardContent className="space-y-4 pt-0">
+              {Object.entries(stats.itemsByCondition).map(([condition, count]) => {
+                const percentage = stats.totalItems > 0 ? (count / stats.totalItems) * 100 : 0;
+                let colorClass = "bg-primary";
+                if (condition === 'hilang') colorClass = "bg-red-500";
+                if (condition === 'dipinjam') colorClass = "bg-orange-500";
+                if (condition === 'tersedia') colorClass = "bg-green-500";
+
+                return (
+                  <div key={condition} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="capitalize text-muted-foreground">{condition}</span>
+                      <span className="font-medium text-xs">{count} ({percentage.toFixed(1)}%)</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${colorClass}`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{count}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {((count / stats.totalItems) * 100).toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
           {/* Institution Distribution */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Building className="h-5 w-5" />
+            <CardHeader className="pb-1">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <Building className="h-4 w-4 text-muted-foreground" />
                 Per Institusi
               </CardTitle>
-              <CardDescription>
-                Jumlah barang per institusi
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 max-h-64 overflow-y-auto">
+            <CardContent className="space-y-4 pt-0 max-h-64 overflow-y-auto pr-2">
               {stats.itemsByInstitution
                 .sort((a, b) => b.count - a.count)
-                .map((institution) => (
-                  <div key={institution.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium truncate max-w-32">
-                        {institution.name}
-                      </span>
+                .map((institution) => {
+                  const percentage = stats.totalItems > 0 ? (institution.count / stats.totalItems) * 100 : 0;
+                  return (
+                    <div key={institution.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground truncate max-w-[150px]">{institution.name}</span>
+                        <span className="font-medium text-xs">{institution.count} ({percentage.toFixed(1)}%)</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{institution.count}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {((institution.count / stats.totalItems) * 100).toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </CardContent>
           </Card>
         </div>
 
         {/* Header dengan Search dan Filter */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setShowCreate(true)} className="gap-2">
-              <Plus className="h-4 w-4" /> 
+              <Plus className="h-4 w-4" />
               Tambah Barang
             </Button>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center w-full md:w-auto">
             {/* Search Input */}
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative">
+            <form onSubmit={handleSearch} className="flex gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   placeholder="Cari barang..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-full sm:w-64"
+                  className="pl-9 w-full"
                 />
               </div>
+              <Button type="submit" className="gap-2 shrink-0">
+                <Search className="h-4 w-4" />
+                <span className="hidden sm:inline">Cari</span>
+              </Button>
             </form>
+            <div className="hidden md:block w-[1px] h-8 bg-border mx-2"></div>
 
-            {/* Institution Filter */}
-            <Select value={selectedInstitution} onValueChange={setSelectedInstitution}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filter Institusi" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Institusi</SelectItem>
-                {institutions.map((institution) => (
-                  <SelectItem key={institution.id} value={institution.id.toString()}>
-                    {institution.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2 w-full md:w-auto">
+              {/* Per Page */}
+              <Select
+                value={String(per_page)}
+                onValueChange={(value) => {
+                  router.get(route('items.index'), {
+                    search: searchTerm,
+                    institution: selectedInstitution,
+                    per_page: value,
+                    page: 1
+                  }, { preserveState: true, preserveScroll: true });
+                }}
+              >
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue placeholder={String(per_page)} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="15">15</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="30">30</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Institution Filter */}
+              <Select value={selectedInstitution} onValueChange={setSelectedInstitution}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Filter Institusi" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Institusi</SelectItem>
+                  {institutions.map((institution) => (
+                    <SelectItem key={institution.id} value={institution.id.toString()}>
+                      {institution.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -436,136 +480,157 @@ export default function Items({
           <div>
             <h2 className="text-lg font-semibold">Daftar Barang</h2>
             <p className="text-sm text-muted-foreground">
-              {filteredItems.length} dari {data.length} barang ditemukan
+              {data.length} dari {total} barang ditemukan
             </p>
           </div>
-          {filteredItems.length > 0 && (
+          {data.length > 0 && (
             <Badge variant="outline" className="gap-1">
               <MapPin className="h-3 w-3" />
-              {new Set(filteredItems.map(item => item.location)).size} lokasi berbeda
+              {new Set(data.map(item => item.location)).size} lokasi berbeda
             </Badge>
           )}
         </div>
-        
-        {/* List Items */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredItems.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">Tidak ada barang ditemukan</p>
-              <p className="text-gray-400 text-sm mt-2">
-                {searchTerm || selectedInstitution !== 'all' 
-                  ? 'Coba ubah pencarian atau filter' 
-                  : 'Mulai dengan menambahkan barang baru'
-                }
-              </p>
-            </div>
-          ) : (
-            filteredItems.map((item) => (
-              <Card key={item.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                {/* Header dengan Gambar/Icon */}
-                <div className="h-32 bg-gradient-to-r from-blue-500 to-blue-600 relative">
-                  {item.photo ? (
-                    <img 
-                      src={`/storage/${item.photo}`} 
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-                      <Package className="h-12 w-12 text-gray-400" />
-                    </div>
-                  )}
-                  <div className="absolute top-3 right-3 flex gap-1">
-                    <Badge variant={getStatusVariant(item.status)} className="text-xs">
-                      {item.status}
-                    </Badge>
-                    <Badge variant={getConditionVariant(item.condition)} className="text-xs">
-                      {item.condition}
-                    </Badge>
-                  </div>
-                </div>
 
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg line-clamp-1">{item.name}</CardTitle>
-                  <CardDescription className="flex items-center gap-1">
-                    <Building className="h-3 w-3" />
-                    {item.institution?.name || 'Tidak ada institusi'}
-                  </CardDescription>
-                </CardHeader>
+        {/* List Items - Table Layout */}
+        <div className="rounded-md border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[300px]">Barang</TableHead>
+                <TableHead>Status & Kondisi</TableHead>
+                <TableHead>Stok & Harga</TableHead>
+                <TableHead>Lokasi & Instansi</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Package className="h-8 w-8 text-muted-foreground" />
+                      <p className="text-muted-foreground">Tidak ada barang ditemukan</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data.map((item) => (
+                  <TableRow key={item.id} className="group">
+                    {/* INFO BARANG */}
+                    <TableCell>
+                      <div className="flex items-start gap-4">
+                        {/* Image Thumbnail */}
+                        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border bg-muted">
+                          {item.photo ? (
+                            <img
+                              src={`/storage/${item.photo}`}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-secondary">
+                              <Package className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
 
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-600">Kode:</span>
-                      <span className="font-medium">{item.item_code}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-600">Harga:</span>
-                      <span className="font-medium">Rp {item.price.toLocaleString()}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-600">Stok:</span>
-                      <span className="font-medium">{item.stock ?? 0}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-600">Lokasi:</span>
-                      <span className="font-medium line-clamp-1">{item.location}</span>
-                    </div>
-                  </div>
+                        {/* Text Details */}
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold leading-tight line-clamp-2">{item.name}</span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="font-mono bg-muted px-1 py-0.5 rounded">{item.item_code}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 pt-3 border-t">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEditItem(item)}
-                      className="flex-1 gap-1"
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => {
-                        if (confirm('Yakin hapus item ini?')) {
-                          router.delete(items.destroy(item.id).url);
-                        }
-                      }}
-                      className="flex-1 gap-1"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Hapus
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
+                    {/* STATUS & KONDISI */}
+                    <TableCell>
+                      <div className="flex flex-col gap-2 items-start">
+                        <Badge variant={getStatusVariant(item.status)} className="capitalize min-w-[80px] justify-center">
+                          {item.status}
+                        </Badge>
+                        <Badge variant={getConditionVariant(item.condition)} className="capitalize min-w-[80px] justify-center">
+                          {item.condition}
+                        </Badge>
+                      </div>
+                    </TableCell>
+
+                    {/* STOK & HARGA */}
+                    <TableCell>
+                      <div className="flex flex-col gap-1 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground w-10">Stok:</span>
+                          <span className="font-semibold">{item.stock ?? 0}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground w-10">Harga:</span>
+                          <span>Rp {item.price?.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    {/* LOKASI & INSTANSI */}
+                    <TableCell>
+                      <div className="flex flex-col gap-1 text-sm">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <MapPin className="h-3.5 w-3.5" />
+                          <span className="text-foreground">{item.location}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                          <Building className="h-3 w-3" />
+                          <span>{item.institution?.name || '-'}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    {/* AKSI */}
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setEditItem(item)}
+                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm('Yakin hapus item ini?')) {
+                              router.delete(items.destroy(item.id).url);
+                            }
+                          }}
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
 
-        {/* Pagination */}
-        {last_page > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              Menampilkan {from} sampai {to} dari {total} barang
-            </p>
+        {/* Pagination & Limit */}
+        <div className="flex flex-col items-center gap-3 mt-4">
+          {last_page > 1 && (
             <Pagination>
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious 
+                  <PaginationPrevious
                     href="#"
                     onClick={(e: { preventDefault: () => void; }) => {
                       e.preventDefault();
                       if (current_page > 1) handlePageChange(current_page - 1);
-                    } }
-                    className={current_page === 1 ? 'pointer-events-none opacity-50' : ''} size={undefined}                  />
+                    }}
+                    className={current_page === 1 ? 'pointer-events-none opacity-50' : ''} />
                 </PaginationItem>
-                
+
                 {Array.from({ length: last_page }, (_, i) => i + 1).map((page) => (
                   <PaginationItem key={page}>
                     <PaginationLink
@@ -573,26 +638,29 @@ export default function Items({
                       onClick={(e: { preventDefault: () => void; }) => {
                         e.preventDefault();
                         handlePageChange(page);
-                      } }
-                      isActive={page === current_page} size={undefined}                    >
+                      }}
+                      isActive={page === current_page} >
                       {page}
                     </PaginationLink>
                   </PaginationItem>
                 ))}
-                
+
                 <PaginationItem>
-                  <PaginationNext 
+                  <PaginationNext
                     href="#"
                     onClick={(e: { preventDefault: () => void; }) => {
                       e.preventDefault();
                       if (current_page < last_page) handlePageChange(current_page + 1);
-                    } }
-                    className={current_page === last_page ? 'pointer-events-none opacity-50' : ''} size={undefined}                  />
+                    }}
+                    className={current_page === last_page ? 'pointer-events-none opacity-50' : ''} />
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
-          </div>
-        )}
+          )}
+          <p className="text-sm text-gray-600">
+            Menampilkan {from ?? 0} sampai {to ?? 0} dari {total} barang
+          </p>
+        </div>
       </div>
 
       {/* Dialogs */}

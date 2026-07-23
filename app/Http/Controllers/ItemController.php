@@ -123,6 +123,8 @@ class ItemController extends Controller
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
             'photo' => 'nullable|image|max:2048',
+            'purchase_year' => 'nullable|integer|min:1900|max:' . (date('Y') + 10),
+            'source_of_funds' => 'nullable|string|max:255',
         ]);
 
         // Force institution ID if admin is strict
@@ -140,7 +142,9 @@ class ItemController extends Controller
             'location',
             'status',
             'condition',
-            'institution_id'
+            'institution_id',
+            'purchase_year',
+            'source_of_funds'
         ]);
 
         $data['item_code'] = $institution->code . '-' . $request->number_code;
@@ -186,6 +190,8 @@ class ItemController extends Controller
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
             'photo' => 'nullable|image|max:2048',
+            'purchase_year' => 'nullable|integer|min:1900|max:' . (date('Y') + 10),
+            'source_of_funds' => 'nullable|string|max:255',
         ]);
 
         Log::info('✅ Validation passed:', $validated);
@@ -199,6 +205,8 @@ class ItemController extends Controller
         $item->status = $validated['status'];
         $item->condition = $validated['condition'];
         $item->institution_id = $validated['institution_id'];
+        $item->purchase_year = $validated['purchase_year'] ?? null;
+        $item->source_of_funds = $validated['source_of_funds'] ?? null;
 
         // Handle file upload
         if ($request->hasFile('photo')) {

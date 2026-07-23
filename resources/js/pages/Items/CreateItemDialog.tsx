@@ -43,6 +43,8 @@ interface ItemForm {
   condition: "tersedia" | "dipinjam" | "hilang" | "";
   institution_id: number | "";
   photo: File | null;
+  purchase_year: number | string;
+  source_of_funds: string;
 }
 
 export default function CreateItemDialog({ open, onClose, institutions }: Props) {
@@ -57,6 +59,8 @@ export default function CreateItemDialog({ open, onClose, institutions }: Props)
     condition: "",
     institution_id: "",
     photo: null,
+    purchase_year: "",
+    source_of_funds: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -220,6 +224,46 @@ const CONDITION_OPTIONS = [
                   </Select>
               {errors.condition && (
                 <p className="text-red-500 text-sm">{errors.condition}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Tahun Pembelian & Sumber Dana */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="purchase_year">Tahun Pembelian</Label>
+              <Input
+                id="purchase_year"
+                type="number"
+                value={data.purchase_year}
+                onChange={(e) => setData("purchase_year", e.target.value)}
+                placeholder="Contoh: 2024"
+              />
+              {errors.purchase_year && (
+                <p className="text-red-500 text-sm">{errors.purchase_year}</p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="source_of_funds">Sumber Dana</Label>
+              <Select
+                value={data.source_of_funds}
+                onValueChange={(value) => setData("source_of_funds", value)}
+              >
+                <SelectTrigger id="source_of_funds">
+                  <SelectValue placeholder="Pilih sumber dana" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Sumber Dana</SelectLabel>
+                    {["Yayasan", "Komite Sekolah", "Dana BOS", "UPZ"].map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {errors.source_of_funds && (
+                <p className="text-red-500 text-sm">{errors.source_of_funds}</p>
               )}
             </div>
           </div>

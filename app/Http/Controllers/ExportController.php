@@ -48,13 +48,13 @@ class ExportController extends Controller
 
         // Set title
         $sheet->setCellValue('A1', 'DATA BARANG INVENTARIS');
-        $sheet->mergeCells('A1:J1');
+        $sheet->mergeCells('A1:M1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Set export info
         $sheet->setCellValue('A2', 'Diekspor pada: ' . date('d/m/Y H:i:s'));
-        $sheet->mergeCells('A2:J2');
+        $sheet->mergeCells('A2:M2');
         $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle('A2')->getFont()->setItalic(true);
 
@@ -70,6 +70,8 @@ class ExportController extends Controller
             'STATUS',
             'KONDISI',
             'INSTITUSI',
+            'TAHUN PEMBELIAN',
+            'SUMBER DANA',
             'TANGGAL DIBUAT'
         ];
 
@@ -96,7 +98,7 @@ class ExportController extends Controller
                 ],
             ],
         ];
-        $sheet->getStyle('A4:K4')->applyFromArray($headerStyle);
+        $sheet->getStyle('A4:M4')->applyFromArray($headerStyle);
 
         // Add data
         $row = 5;
@@ -112,7 +114,9 @@ class ExportController extends Controller
             $sheet->setCellValue('H' . $row, ucfirst($item->status));
             $sheet->setCellValue('I' . $row, ucfirst($item->condition));
             $sheet->setCellValue('J' . $row, $item->institution->name);
-            $sheet->setCellValue('K' . $row, $item->created_at->format('d/m/Y H:i'));
+            $sheet->setCellValue('K' . $row, $item->purchase_year ?? '-');
+            $sheet->setCellValue('L' . $row, $item->source_of_funds ?? '-');
+            $sheet->setCellValue('M' . $row, $item->created_at->format('d/m/Y H:i'));
 
             $row++;
             $number++;
@@ -131,10 +135,10 @@ class ExportController extends Controller
             ],
         ];
         $lastRow = $row - 1;
-        $sheet->getStyle('A5:K' . $lastRow)->applyFromArray($dataStyle);
+        $sheet->getStyle('A5:M' . $lastRow)->applyFromArray($dataStyle);
 
         // Auto size columns
-        foreach (range('A', 'K') as $column) {
+        foreach (range('A', 'M') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -146,7 +150,7 @@ class ExportController extends Controller
         $sheet->getStyle('F5:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Add filters
-        $sheet->setAutoFilter('A4:K' . $lastRow);
+        $sheet->setAutoFilter('A4:M' . $lastRow);
 
         // Freeze panes (header row)
         $sheet->freezePane('A5');

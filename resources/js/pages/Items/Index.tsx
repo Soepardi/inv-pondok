@@ -106,6 +106,8 @@ function toItemForm(item: Item): ItemForm {
     condition: item.condition,
     institution_id: item.institution_id,
     photo: item.photo || null,
+    purchase_year: item.purchase_year || "",
+    source_of_funds: item.source_of_funds || "",
   };
 }
 
@@ -581,6 +583,20 @@ export default function Items({
                           <Building className="h-3 w-3" />
                           <span>{item.institution?.name || '-'}</span>
                         </div>
+                        {(item.purchase_year || item.source_of_funds) && (
+                          <div className="flex flex-wrap gap-1 mt-1 text-[10px]">
+                            {item.purchase_year && (
+                              <Badge variant="outline" className="px-1 py-0 text-zinc-500 font-medium border-zinc-200">
+                                Thn: {item.purchase_year}
+                              </Badge>
+                            )}
+                            {item.source_of_funds && (
+                              <Badge variant="outline" className="px-1.5 py-0 text-zinc-500 font-medium border-zinc-200 truncate max-w-[120px]" title={item.source_of_funds}>
+                                Dana: {item.source_of_funds}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
 

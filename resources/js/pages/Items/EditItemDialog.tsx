@@ -40,6 +40,8 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
     condition: item.condition || "tersedia",
     institution_id: item.institution_id || institutions[0]?.id || 0,
     photo: null as File | null,
+    purchase_year: item.purchase_year || "",
+    source_of_funds: item.source_of_funds || "",
   });
 
   // Reset form ketika item berubah
@@ -57,6 +59,8 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
         condition: item.condition || "tersedia",
         institution_id: item.institution_id || institutions[0]?.id || 0,
         photo: null,
+        purchase_year: item.purchase_year || "",
+        source_of_funds: item.source_of_funds || "",
       });
     }
   }, [open, item, institutions, reset]);
@@ -89,6 +93,8 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
       condition: data.condition,
       institution_id: data.institution_id,
       photo: data.photo,
+      purchase_year: data.purchase_year,
+      source_of_funds: data.source_of_funds,
     };
 
     //console.log('📨 Data to be sent:', submitData);
@@ -299,6 +305,54 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
               </Select>
               {errors.condition && (
                 <p className="text-red-500 text-sm mt-1">{errors.condition}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Tahun Pembelian & Sumber Dana */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="purchase_year" className="text-sm font-medium">
+                Tahun Pembelian
+              </Label>
+              <Input
+                id="purchase_year"
+                type="number"
+                value={data.purchase_year}
+                onChange={(e) => setData("purchase_year", e.target.value)}
+                placeholder="Contoh: 2024"
+                className={errors.purchase_year ? "border-red-500" : ""}
+              />
+              {errors.purchase_year && (
+                <p className="text-red-500 text-sm mt-1">{errors.purchase_year}</p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="source_of_funds" className="text-sm font-medium">
+                Sumber Dana
+              </Label>
+              <Select
+                value={data.source_of_funds}
+                onValueChange={(value) => setData("source_of_funds", value)}
+              >
+                <SelectTrigger
+                  id="source_of_funds"
+                  className={errors.source_of_funds ? "border-red-500" : ""}
+                >
+                  <SelectValue placeholder="Pilih sumber dana" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Sumber Dana</SelectLabel>
+                    {["Yayasan", "Komite Sekolah", "Dana BOS", "UPZ"].map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {errors.source_of_funds && (
+                <p className="text-red-500 text-sm mt-1">{errors.source_of_funds}</p>
               )}
             </div>
           </div>

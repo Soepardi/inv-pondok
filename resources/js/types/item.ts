@@ -16,8 +16,6 @@ export interface ItemForm {
   condition: 'tersedia' | 'dipinjam' | 'hilang';
   institution_id: number;
   photo: File | string | null;
-  purchase_year?: number | string | null;
-  source_of_funds?: string | null;
   created_at?: string;
   updated_at?: string;
 }

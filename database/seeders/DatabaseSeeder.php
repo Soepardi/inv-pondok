@@ -59,8 +59,6 @@ class DatabaseSeeder extends Seeder
             'status' => 'baik',
             'condition' => 'tersedia',
             'institution_id' => $institution->id,
-            'purchase_year' => 2023,
-            'source_of_funds' => 'Yayasan',
         ]);
 
         Item::create([
@@ -73,8 +71,6 @@ class DatabaseSeeder extends Seeder
             'status' => 'baik',
             'condition' => 'tersedia',
             'institution_id' => $institution->id,
-            'purchase_year' => 2024,
-            'source_of_funds' => 'Dana BOS',
         ]);
 
         Item::create([
@@ -87,8 +83,6 @@ class DatabaseSeeder extends Seeder
             'status' => 'baik',
             'condition' => 'tersedia',
             'institution_id' => $institution->id,
-            'purchase_year' => 2022,
-            'source_of_funds' => 'Komite',
         ]);
 
         // Buat loan dengan due_date, notes, dan stock

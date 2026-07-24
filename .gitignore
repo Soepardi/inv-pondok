@@ -12,7 +12,7 @@
 /vendor
 .env
 .env.backup
-.env.production
+# .env.production is intentionally tracked (no secrets, only config structure)
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

@@ -76,7 +76,7 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    //console.log('🔄 Submitting form data:', data);
+    // console.log('Submitting form data:', data);
 
     // Prepare data untuk dikirim
     const submitData = {
@@ -91,13 +91,13 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
       photo: data.photo,
     };
 
-    //console.log('📨 Data to be sent:', submitData);
+    // console.log('Data to be sent:', submitData);
 
     // Gunakan PUT request dengan data
     router.put(`/items/${item.id}`, submitData, {
       onSuccess: (page) => {
-        //console.log('✅ Success! Page props:', page.props);
-        //console.log('🎉 Flash message:', page.props.flash);
+        // console.log('Success! Page props:', page.props);
+        // console.log('Flash message:', page.props.flash);
         
         reset();
         onClose();
@@ -109,7 +109,7 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
         console.log('Validation errors:', errors);
       },
       onFinish: () => {
-        //console.log('🏁 Request finished');
+        // console.log('Request finished');
       },
     });
   };

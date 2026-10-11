@@ -289,33 +289,6 @@ export default function UserManagement({ users: data, institutions, flash }: Use
           </Card>
         )}
 
-        {/* Quick Actions */}
-        {data.length > 0 && (
-          <Card>
-            <CardHeader className="px-6 py-4">
-              <CardTitle className="text-lg">Informasi Manajemen User</CardTitle>
-              <CardDescription>
-                gunakan modul ini untuk mengelola user aplikasi
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 pt-0">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Administrator</h4>
-                  <p className="text-sm text-muted-foreground">
-                    User dengan role admin memiliki akses penuh ke semua fitur sistem.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Regular User</h4>
-                  <p className="text-sm text-muted-foreground">
-                    User biasa hanya dapat mengakses fitur yang diperbolehkan.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Dialogs */}
         <CreateUserDialog

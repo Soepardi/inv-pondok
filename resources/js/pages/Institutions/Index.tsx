@@ -199,37 +199,6 @@ export default function Institutions({ institutions: data, flash }: Institutions
           </Card>
         )}
 
-        {/* Quick Stats */}
-        {data.length > 0 && (
-          <Card>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary">{data.length}</div>
-                  <div className="text-sm text-muted-foreground">Total Instansi</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {data.filter(inst => inst.description && inst.description.length > 0).length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Dengan Deskripsi</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {new Set(data.map(inst => inst.code)).size}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Kode Unik</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">
-                    {Math.max(...data.map(inst => inst.name.length))}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Karakter Terpanjang</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Dialogs */}
         <CreateInstitutionDialog

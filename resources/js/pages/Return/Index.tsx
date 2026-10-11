@@ -7,7 +7,7 @@ import { Head } from '@inertiajs/react';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Pengembalian Pinjaman',
-        href: return.index().url,
+        href: '#',
     },
 ];
 

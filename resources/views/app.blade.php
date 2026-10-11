@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['dark' => ($appearance ?? 'system') == 'dark'])>
+@php
+    $isForcedLight = in_array($page['component'] ?? '', ['welcome', 'auth/login', 'auth/register', 'auth/forgot-password', 'auth/reset-password']);
+@endphp
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['dark' => !$isForcedLight && (($appearance ?? 'system') == 'dark')])>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +10,13 @@
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
             (function() {
+                const isForcedLight = {{ $isForcedLight ? 'true' : 'false' }};
+                if (isForcedLight) {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.style.colorScheme = 'light';
+                    return;
+                }
+
                 const appearance = '{{ $appearance ?? "system" }}';
 
                 if (appearance === 'system') {

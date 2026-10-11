@@ -1,6 +1,5 @@
 "use client"
 
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
@@ -19,7 +18,7 @@ import {
   Calendar,
   BarChart3,
   Download,
-  UserPlus
+  CheckCircle2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,14 +27,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { useState } from 'react';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-} from "@/components/ui/chart"
+import { useState, useMemo } from 'react';
 import {
   Select,
   SelectContent,
@@ -43,9 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from "recharts"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts"
 
-// Type definitions
 type PopularItem = {
   item: {
     name: string;
@@ -67,7 +58,9 @@ type LoanItem = {
     name: string;
   };
   loan_date: string;
-  return_date: string;
+  due_date?: string;
+  return_date?: string | null;
+  status?: string;
 };
 
 type DashboardProps = {
@@ -91,40 +84,26 @@ const breadcrumbs: BreadcrumbItem[] = [
   },
 ];
 
-// Chart configurations
-const loanTrendsConfig = {
-  Peminjaman: {
-    label: "Total Peminjaman",
-    color: "#2563eb", // blue-600
-  },
-} as const;
-
-const popularItemsConfig = {
-  total: {
-    label: "Total Dipinjam",
-    color: "#8b5cf6", // violet-500
-  },
-} as const;
-
-const statusConfig = {
-  available: {
-    label: "Tersedia",
-    color: "#22c55e", // green-500
-  },
-  borrowed: {
-    label: "Dipinjam",
-    color: "#f59e0b", // amber-500
-  },
-  damaged: {
-    label: "Tidak Tersedia",
-    color: "#ef4444", // red-500
-  },
-} as const;
+// Helper to format "YYYY-MM" to readable Indonesian month string
+function formatMonth(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length < 2) return dateStr;
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+  const monthIdx = parseInt(parts[1], 10) - 1;
+  const year = parts[0];
+  if (monthIdx >= 0 && monthIdx < 12) {
+    return `${monthNames[monthIdx]} ${year}`;
+  }
+  return dateStr;
+}
 
 export default function Dashboard() {
   const [exportLoading, setExportLoading] = useState(false);
-  const [timeRange, setTimeRange] = useState<"90d" | "30d" | "7d">("30d");
-  const [popularItemsRange, setPopularItemsRange] = useState<"all" | "month" | "week">("month");
+  const [timeRange, setTimeRange] = useState<"all" | "6m" | "3m">("all");
 
   const {
     summary = { total: 0, available: 0, borrowed: 0, damaged: 0 },
@@ -135,50 +114,58 @@ export default function Dashboard() {
     loanTrends = [],
   } = usePage().props as unknown as DashboardProps;
 
-  // Prepare chart data with date filtering
-  const loanTrendsData = loanTrends.map(item => ({
-    date: item.bulan,
-    Peminjaman: item.total
-  }));
+  // Total metrics
+  const totalItems = summary.total || (summary.available + summary.borrowed + summary.damaged) || 0;
+  const availablePct = totalItems > 0 ? Math.round((summary.available / totalItems) * 100) : 0;
+  const borrowedPct = totalItems > 0 ? Math.round((summary.borrowed / totalItems) * 100) : 0;
+  const damagedPct = totalItems > 0 ? Math.round((summary.damaged / totalItems) * 100) : 0;
 
-  // Filter loan trends based on time range
-  const filteredLoanTrends = loanTrendsData.filter((item, idx, arr) => {
-    const date = new Date(item.date);
-    const referenceDate = new Date();
-    let monthsToSubtract = 3;
-
-    if (timeRange === "30d") {
-      monthsToSubtract = 1;
-    } else if (timeRange === "7d") {
-      // Only include the last 7 entries
-      return idx >= arr.length - 7;
+  // Format loan trends data
+  const formattedTrends = useMemo(() => {
+    if (!loanTrends || loanTrends.length === 0) {
+      return [
+        { rawDate: '2026-06', date: 'Jun 2026', Peminjaman: 0 },
+        { rawDate: '2026-07', date: 'Jul 2026', Peminjaman: 2 },
+      ];
     }
 
-    const startDate = new Date(referenceDate);
-    startDate.setMonth(startDate.getMonth() - monthsToSubtract);
-    return date >= startDate;
-  });
+    const mapped = loanTrends.map(item => ({
+      rawDate: item.bulan,
+      date: formatMonth(item.bulan),
+      Peminjaman: Number(item.total) || 0
+    }));
 
-  // Prepare popular items data - Simplified for shadcn chart
-  const popularItemsData = popularItems.slice(0, 6).map((item, index) => ({
-    name: item.item.name.length > 15
-      ? item.item.name.substring(0, 15) + '...'
-      : item.item.name,
-    fullName: item.item.name,
-    total: item.total,
-    fill: ["#2563eb", "#8b5cf6", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4"][index % 6] // Cycle appropriate hex colors
-  }));
+    if (timeRange === "3m") {
+      return mapped.slice(-3);
+    } else if (timeRange === "6m") {
+      return mapped.slice(-6);
+    }
+    return mapped;
+  }, [loanTrends, timeRange]);
 
-  // Status distribution data - mapped to config keys
-  const statusData = [
-    { status: 'available', value: summary.available, fill: '#22c55e' }, // green-500
-    { status: 'borrowed', value: summary.borrowed, fill: '#f59e0b' },   // amber-500
-    { status: 'damaged', value: summary.damaged, fill: '#ef4444' },     // red-500
-  ];
+  const totalLoansInPeriod = useMemo(() => {
+    return formattedTrends.reduce((acc, curr) => acc + curr.Peminjaman, 0);
+  }, [formattedTrends]);
+
+  // Donut chart status data
+  const statusData = useMemo(() => [
+    { name: 'Tersedia', value: summary.available, color: '#10b981', pct: availablePct },
+    { name: 'Dipinjam', value: summary.borrowed, color: '#f59e0b', pct: borrowedPct },
+    { name: 'Rusak / Perbaikan', value: summary.damaged, color: '#f43f5e', pct: damagedPct },
+  ], [summary, availablePct, borrowedPct, damagedPct]);
+
+  // Top popular items
+  const topItems = useMemo(() => {
+    return popularItems.slice(0, 5);
+  }, [popularItems]);
+
+  const maxPopularTotal = useMemo(() => {
+    if (topItems.length === 0) return 1;
+    return Math.max(...topItems.map(i => i.total), 1);
+  }, [topItems]);
 
   const handleExport = (type: 'items' | 'loans' | 'dashboard') => {
     setExportLoading(true);
-
     try {
       let url = '';
       switch (type) {
@@ -195,384 +182,459 @@ export default function Dashboard() {
     }
   };
 
-  const statsCards = [
-    {
-      title: "Total Barang",
-      value: summary.total.toLocaleString(),
-      icon: Package,
-      description: "Semua item inventaris",
-      color: "text-blue-600 dark:text-blue-400",
-      bgColor: "bg-blue-50 dark:bg-blue-950/30"
-    },
-    {
-      title: "Tersedia",
-      value: summary.available.toLocaleString(),
-      icon: PackageCheck,
-      description: "Barang siap dipinjam",
-      color: "text-green-600 dark:text-green-400",
-      bgColor: "bg-green-50 dark:bg-green-950/30"
-    },
-    {
-      title: "Dipinjam",
-      value: summary.borrowed.toLocaleString(),
-      icon: Users,
-      description: "Sedang dipinjam",
-      color: "text-orange-600 dark:text-orange-400",
-      bgColor: "bg-orange-50 dark:bg-orange-950/30"
-    },
-    {
-      title: "Tidak Tersedia",
-      value: summary.damaged.toLocaleString(),
-      icon: PackageX,
-      description: "Rusak atau dalam perbaikan",
-      color: "text-red-600 dark:text-red-400",
-      bgColor: "bg-red-50 dark:bg-red-950/30"
-    }
-  ];
-
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Dashboard" />
-      <div className="flex flex-col gap-6 p-6">
-        {/* Header */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Inventaris</h1>
-              <p className="text-muted-foreground mt-1">
-                Ringkasan statistik dan aktivitas inventaris terbaru
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    disabled={exportLoading}
-                  >
-                    <Download className="h-4 w-4" />
-                    {exportLoading ? 'Mengekspor...' : 'Export Data'}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => handleExport('dashboard')} className="gap-2 cursor-pointer">
-                    <BarChart3 className="h-4 w-4" /> Export Dashboard
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport('items')} className="gap-2 cursor-pointer">
-                    <Package className="h-4 w-4" /> Export Data Barang
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('loans')} className="gap-2 cursor-pointer">
-                    <Users className="h-4 w-4" /> Export Data Peminjaman
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+      <Head title="Dashboard - Sistem Inventaris PTM" />
+
+      <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/50">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+              Dashboard Inventaris
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              Ringkasan data inventaris dan aktivitas peminjaman aset
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg gap-2 text-xs font-medium h-9"
+                  disabled={exportLoading}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {exportLoading ? 'Mengekspor...' : 'Export Data'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-lg text-xs">
+                <DropdownMenuItem onClick={() => handleExport('dashboard')} className="gap-2 py-2 cursor-pointer">
+                  <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" /> Export Ringkasan
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleExport('items')} className="gap-2 py-2 cursor-pointer">
+                  <Package className="h-3.5 w-3.5 text-muted-foreground" /> Export Data Barang
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport('loans')} className="gap-2 py-2 cursor-pointer">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" /> Export Data Peminjaman
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {statsCards.map((stat) => (
-            <Card key={stat.title} className="relative overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
-              </CardContent>
-            </Card>
-          ))}
+        {/* 4 Minimalist Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total Barang */}
+          <Card className="rounded-xl border border-border/60 bg-card p-4 py-4 gap-2 shadow-none">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Total Aset</span>
+              <Package className="h-4 w-4 text-muted-foreground/60" />
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-bold tracking-tight text-foreground">
+                {totalItems.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Semua unit terdata
+              </p>
+            </div>
+          </Card>
+
+          {/* Card 2: Tersedia */}
+          <Card className="rounded-xl border border-border/60 bg-card p-4 py-4 gap-2 shadow-none">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Barang Tersedia</span>
+              <PackageCheck className="h-4 w-4 text-emerald-600/70" />
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-bold tracking-tight text-foreground flex items-baseline gap-2">
+                <span>{summary.available.toLocaleString()}</span>
+                <span className="text-xs font-normal text-muted-foreground">({availablePct}%)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Siap untuk dipinjam
+              </p>
+            </div>
+          </Card>
+
+          {/* Card 3: Dipinjam */}
+          <Card className="rounded-xl border border-border/60 bg-card p-4 py-4 gap-2 shadow-none">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Sedang Dipinjam</span>
+              <Clock className="h-4 w-4 text-amber-600/70" />
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-bold tracking-tight text-foreground flex items-baseline gap-2">
+                <span>{summary.borrowed.toLocaleString()}</span>
+                <span className="text-xs font-normal text-muted-foreground">({borrowedPct}%)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Dalam sirkulasi aktif
+              </p>
+            </div>
+          </Card>
+
+          {/* Card 4: Rusak / Perbaikan */}
+          <Card className="rounded-xl border border-border/60 bg-card p-4 py-4 gap-2 shadow-none">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Rusak / Perbaikan</span>
+              <PackageX className="h-4 w-4 text-rose-600/70" />
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-bold tracking-tight text-foreground flex items-baseline gap-2">
+                <span>{summary.damaged.toLocaleString()}</span>
+                <span className="text-xs font-normal text-muted-foreground">({damagedPct}%)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Perlu perbaikan aset
+              </p>
+            </div>
+          </Card>
         </div>
 
-        {/* Main Charts Section */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Loan Trends - Area Chart */}
-          <Card>
-            <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
-              <div className="grid flex-1 gap-1">
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  Tren Peminjaman
+        {/* Section: Minimalist Charts (Area Trend & Donut Status) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Main Area Chart: Tren Peminjaman (8 Cols) */}
+          <Card className="lg:col-span-7 xl:col-span-8 rounded-xl border border-border/60 bg-card shadow-none gap-0 py-0">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/40">
+              <div className="space-y-0.5">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  <span>Tren Peminjaman Barang</span>
                 </CardTitle>
-                <CardDescription>
-                  Aktivitas peminjaman dalam periode tertentu
+                <CardDescription className="text-xs text-muted-foreground">
+                  Frekuensi transaksi peminjaman per periode
                 </CardDescription>
               </div>
-              <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
-                <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto">
-                  <SelectValue placeholder="Pilih periode" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value="90d">3 Bulan Terakhir</SelectItem>
-                  <SelectItem value="30d">30 Hari Terakhir</SelectItem>
-                  <SelectItem value="7d">7 Hari Terakhir</SelectItem>
-                </SelectContent>
-              </Select>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Total: {totalLoansInPeriod} transaksi
+                </span>
+                <Select value={timeRange} onValueChange={(val: any) => setTimeRange(val)}>
+                  <SelectTrigger className="w-32 h-8 rounded-lg text-xs">
+                    <SelectValue placeholder="Periode" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-lg text-xs">
+                    <SelectItem value="all">Semua Waktu</SelectItem>
+                    <SelectItem value="6m">6 Bulan</SelectItem>
+                    <SelectItem value="3m">3 Bulan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
-            <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-              {filteredLoanTrends.length === 0 ? (
-                <div className="flex h-64 items-center justify-center">
-                  <PlaceholderPattern />
-                </div>
-              ) : (
-                <ChartContainer config={loanTrendsConfig} className="aspect-auto h-64 w-full">
-                  <AreaChart data={filteredLoanTrends}>
+
+            <CardContent className="pt-5 pb-3">
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={formattedTrends} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="fillPeminjaman" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--color-Peminjaman)" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="var(--color-Peminjaman)" stopOpacity={0.1} />
+                      <linearGradient id="minimalEmerald" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} />
+
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-border/30" />
+
                     <XAxis
                       dataKey="date"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      minTickGap={32}
+                      tick={{ fill: 'currentColor', fontSize: 11 }}
+                      className="text-muted-foreground font-normal"
                     />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                    <Area
-                      dataKey="Peminjaman"
-                      type="natural"
-                      fill="url(#fillPeminjaman)"
-                      fillOpacity={0.4}
-                      stroke="var(--color-Peminjaman)"
-                      stackId="a"
-                    />
-                  </AreaChart>
-                </ChartContainer>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Popular Items - Bar Chart */}
-          <Card>
-            <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
-              <div className="grid flex-1 gap-1">
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  Barang Populer
-                </CardTitle>
-                <CardDescription>
-                  Barang paling sering dipinjam
-                </CardDescription>
-              </div>
-              <Select value={popularItemsRange} onValueChange={(value: any) => setPopularItemsRange(value)}>
-                <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto">
-                  <SelectValue placeholder="Pilih periode" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value="all">Semua Waktu</SelectItem>
-                  <SelectItem value="month">Bulan Ini</SelectItem>
-                  <SelectItem value="week">Minggu Ini</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardHeader>
-            <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-              {popularItemsData.length === 0 ? (
-                <div className="flex h-64 items-center justify-center">
-                  <PlaceholderPattern />
-                </div>
-              ) : (
-                <ChartContainer config={popularItemsConfig} className="aspect-auto h-64 w-full">
-                  <BarChart data={popularItemsData} layout="vertical" margin={{ left: 0 }}>
-                    <CartesianGrid horizontal={false} />
                     <YAxis
-                      dataKey="name"
-                      type="category"
                       tickLine={false}
                       axisLine={false}
-                      width={100}
+                      tickMargin={6}
+                      allowDecimals={false}
+                      tick={{ fill: 'currentColor', fontSize: 11 }}
+                      className="text-muted-foreground font-normal"
                     />
-                    <XAxis type="number" hide />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent indicator="dashed" />}
+
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="rounded-lg border border-border bg-popover p-2.5 shadow-sm text-xs space-y-0.5">
+                              <p className="font-medium text-popover-foreground">{data.date}</p>
+                              <p className="text-emerald-600 font-semibold">{data.Peminjaman} Peminjaman</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
                     />
-                    <Bar
-                      dataKey="total"
-                      fill="var(--color-total)"
-                      radius={4}
+
+                    <Area
+                      type="monotone"
+                      dataKey="Peminjaman"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      fill="url(#minimalEmerald)"
+                      dot={{ r: 3, fill: '#10b981', stroke: '#fff', strokeWidth: 1.5 }}
+                      activeDot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
                     />
-                  </BarChart>
-                </ChartContainer>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Minimalist Donut Chart: Status Barang (4 Cols) */}
+          <Card className="lg:col-span-5 xl:col-span-4 rounded-xl border border-border/60 bg-card shadow-none flex flex-col justify-between gap-0 py-0">
+            <CardHeader className="pb-2 border-b border-border/40">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <span>Distribusi Status Aset</span>
+              </CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
+                Rasio ketersediaan barang inventaris
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="pt-4 pb-4 flex flex-col items-center justify-center flex-1">
+              {/* Donut with Minimal Center Metric */}
+              <div className="relative w-full max-w-[200px] aspect-square mx-auto flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const p = payload[0].payload;
+                          return (
+                            <div className="rounded-lg border border-border bg-popover p-2 shadow-sm text-xs space-y-0.5">
+                              <p className="font-medium text-popover-foreground">{p.name}</p>
+                              <p className="text-muted-foreground">{p.value} Unit ({p.pct}%)</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Pie
+                      data={statusData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={65}
+                      outerRadius={85}
+                      paddingAngle={3}
+                      stroke="none"
+                    >
+                      {statusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+
+                {/* Minimal Center Counter */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                  <span className="text-2xl font-bold tracking-tight text-foreground">
+                    {totalItems}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    Total Unit
+                  </span>
+                </div>
+              </div>
+
+              {/* Minimal Breakdown Legend */}
+              <div className="w-full space-y-2 pt-4 mt-2 border-t border-border/40">
+                {statusData.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      <span className="text-foreground">{item.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground font-mono text-[11px]">
+                      <span>{item.value} unit</span>
+                      <span className="text-foreground font-semibold w-8 text-right">{item.pct}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Section: Barang Populer & Aktivitas Terbaru */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Barang Populer (5 Cols) */}
+          <Card className="lg:col-span-5 rounded-xl border border-border/60 bg-card shadow-none gap-0 py-0">
+            <CardHeader className="pb-3 border-b border-border/40">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                  <span>Barang Paling Sering Dipinjam</span>
+                </CardTitle>
+                <span className="text-xs text-muted-foreground">Top 5</span>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-4 space-y-3">
+              {topItems.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-xs">
+                  Belum ada riwayat peminjaman barang.
+                </div>
+              ) : (
+                topItems.map((popular, index) => {
+                  const pct = Math.round((popular.total / maxPopularTotal) * 100);
+                  const rankNumber = String(index + 1).padStart(2, '0');
+                  return (
+                    <div key={popular.item?.name || index} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2.5 truncate max-w-[240px]">
+                          <span className="font-mono text-[11px] font-semibold text-muted-foreground w-5 shrink-0">
+                            {rankNumber}
+                          </span>
+                          <span className="font-medium text-foreground truncate">
+                            {popular.item?.name || 'Barang'}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                          {popular.total}x dipinjam
+                        </span>
+                      </div>
+
+                      {/* Minimal progress line */}
+                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Aktivitas Terbaru (7 Cols) */}
+          <Card className="lg:col-span-7 rounded-xl border border-border/60 bg-card shadow-none gap-0 py-0">
+            <CardHeader className="pb-3 border-b border-border/40">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>Aktivitas Peminjaman Terbaru</span>
+                </CardTitle>
+                <span className="text-xs text-muted-foreground">{recentLoans.length} aktivitas</span>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-3 space-y-2">
+              {recentLoans.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-xs">
+                  Belum ada aktivitas transaksi.
+                </div>
+              ) : (
+                recentLoans.slice(0, 5).map((loan) => (
+                  <div
+                    key={loan.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg border border-border/40 hover:bg-muted/30 transition-colors text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div className="truncate">
+                        <p className="font-medium text-foreground truncate">
+                          {loan.item?.name || 'Barang'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Oleh: {loan.user?.name || 'Peminjam'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 space-y-0.5">
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
+                        {loan.status === 'approved' ? 'Disetujui' :
+                         loan.status === 'returned' ? 'Dikembalikan' :
+                         loan.status === 'pending' ? 'Pending' : (loan.status || 'Aktif')}
+                      </Badge>
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        {loan.due_date ? `Tempo: ${loan.due_date}` : loan.loan_date}
+                      </p>
+                    </div>
+                  </div>
+                ))
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Status Distribution and Recent Activity */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Status Distribution - Pie Chart */}
-          <Card className="flex flex-col">
-            <CardHeader className="items-center pb-0">
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Package className="h-5 w-5 text-muted-foreground" />
-                Status Barang
-              </CardTitle>
-              <CardDescription>
-                Distribusi status inventaris
-              </CardDescription>
+        {/* Section: Pengingat Jatuh Tempo & Keterlambatan */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Akan Jatuh Tempo */}
+          <Card className="rounded-xl border border-border/60 bg-card shadow-none gap-0 py-0">
+            <CardHeader className="pb-3 border-b border-border/40">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-semibold flex items-center gap-1.5 text-foreground uppercase tracking-wider">
+                  <Calendar className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Akan Jatuh Tempo</span>
+                </CardTitle>
+                <span className="text-xs text-muted-foreground font-mono">{upcomingDue.length} item</span>
+              </div>
             </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              <ChartContainer config={statusConfig} className="mx-auto aspect-square max-h-[250px]">
-                <PieChart>
-                  <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-                  <Pie
-                    data={statusData}
-                    dataKey="value"
-                    nameKey="status"
-                    innerRadius={60}
-                    strokeWidth={5}
-                  />
-                </PieChart>
-              </ChartContainer>
+            <CardContent className="pt-3 space-y-2">
+              {upcomingDue.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-xs">
+                  Tidak ada barang yang mendekati jatuh tempo.
+                </div>
+              ) : (
+                upcomingDue.slice(0, 4).map((loan) => (
+                  <div key={loan.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/40 text-xs">
+                    <div>
+                      <p className="font-medium text-foreground">{loan.item?.name}</p>
+                      <p className="text-[11px] text-muted-foreground">Peminjam: {loan.user?.name}</p>
+                    </div>
+                    <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                      {loan.due_date || loan.return_date || '-'}
+                    </span>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
-          {/* Recent Loans */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Aktivitas Terbaru
-              </CardTitle>
-              <CardDescription>
-                Riwayat peminjaman terbaru
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentLoans.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>Tidak ada data peminjaman</p>
-                  </div>
-                ) : (
-                  recentLoans.slice(0, 6).map((loan) => (
-                    <div key={loan.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-950/50 rounded-lg flex items-center justify-center">
-                          <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {loan.item.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Dipinjam oleh {loan.user.name}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant="secondary">
-                          {loan.loan_date}
-                        </Badge>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Jatuh tempo: {loan.return_date}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
+          {/* Keterlambatan (Overdue) */}
+          <Card className="rounded-xl border border-border/60 bg-card shadow-none gap-0 py-0">
+            <CardHeader className="pb-3 border-b border-border/40">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-semibold flex items-center gap-1.5 text-foreground uppercase tracking-wider">
+                  <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+                  <span>Keterlambatan Pengembalian</span>
+                </CardTitle>
+                <span className="text-xs text-muted-foreground font-mono">{overdue.length} item</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Alerts Section */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Upcoming Due */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Calendar className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                Akan Jatuh Tempo
-                <Badge variant="secondary" className="ml-2">
-                  {upcomingDue.length}
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                Barang yang akan segera dikembalikan
-              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {upcomingDue.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Tidak ada barang jatuh tempo</p>
-                  </div>
-                ) : (
-                  upcomingDue.slice(0, 4).map((loan) => (
-                    <div key={loan.id} className="flex items-center justify-between p-3 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-foreground">
-                          {loan.item.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {loan.user.name}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="bg-background text-orange-700 dark:text-orange-300">
-                        {loan.return_date}
-                      </Badge>
+            <CardContent className="pt-3 space-y-2">
+              {overdue.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-xs">
+                  Semua peminjaman tepat waktu.
+                </div>
+              ) : (
+                overdue.slice(0, 4).map((loan) => (
+                  <div key={loan.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/40 text-xs">
+                    <div>
+                      <p className="font-medium text-foreground">{loan.item?.name}</p>
+                      <p className="text-[11px] text-muted-foreground">Peminjam: {loan.user?.name}</p>
                     </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Overdue Items */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                Keterlambatan
-                <Badge variant="destructive" className="ml-2">
-                  {overdue.length}
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                Barang yang terlambat dikembalikan
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {overdue.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Tidak ada barang terlambat</p>
+                    <span className="font-mono text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                      Lewat: {loan.due_date || loan.return_date || '-'}
+                    </span>
                   </div>
-                ) : (
-                  overdue.slice(0, 4).map((loan) => (
-                    <div key={loan.id} className="flex items-center justify-between p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-foreground">
-                          {loan.item.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {loan.user.name}
-                        </p>
-                      </div>
-                      <Badge variant="destructive">
-                        {loan.return_date}
-                      </Badge>
-                    </div>
-                  ))
-                )}
-              </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

@@ -6,6 +6,10 @@ import { defineConfig } from 'vite';
 import fs from 'fs';
 
 const phpBinary = fs.existsSync('C:/php/php.exe') ? 'C:/php/php.exe' : 'php';
+const isWin = process.platform === 'win32';
+const wayfinderCommand = isWin
+    ? `${phpBinary} artisan wayfinder:generate`
+    : 'php artisan wayfinder:generate || true';
 
 export default defineConfig({
     plugins: [
@@ -17,7 +21,7 @@ export default defineConfig({
         react(),
         tailwindcss(),
         wayfinder({
-            command: `${phpBinary} artisan wayfinder:generate`,
+            command: wayfinderCommand,
             formVariants: true,
         }),
     ],

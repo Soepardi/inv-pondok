@@ -2,7 +2,7 @@ services:
   - type: web
     name: inv-pondok
     runtime: docker
-    plan: free
+    plan: starter
     region: singapore
     envVars:
       - key: APP_NAME
@@ -32,5 +32,5 @@ databases:
   - name: inv-db
     databaseName: inv_db
     user: inv_user
-    plan: free
+    plan: starter
     region: singapore

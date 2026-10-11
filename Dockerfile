@@ -32,15 +32,19 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader
 
 # Copy package files and install npm deps
 COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline
+RUN npm ci
 
 # Copy application files
 COPY . .
+
+# Prepare temporary .env for build process
+RUN cp .env.production .env
 
 # Finalize Composer autoloader
 RUN composer dump-autoload --optimize
 
 # Build frontend assets
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 # Apache configuration: point document root to /public

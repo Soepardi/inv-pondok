@@ -23,6 +23,7 @@ class User extends Authenticatable
         'password',
         'role',
         'institution_id',
+        'email_verified_at',
     ];
 
     public function loans()

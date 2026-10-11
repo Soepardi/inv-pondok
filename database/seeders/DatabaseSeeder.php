@@ -15,38 +15,49 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Buat admin global (tanpa institution_id)
-        User::create([
-            'name' => 'Supardi',
-            'email' => 'akhiyat@gmail.com',
-            'password' => Hash::make('1234567890'),
-            'role' => 'admin',
-            'institution_id' => null,
-        ]);
+        User::firstOrCreate(
+            ['email' => 'akhiyat@gmail.com'],
+            [
+                'name' => 'Supardi',
+                'password' => Hash::make('1234567890'),
+                'role' => 'admin',
+                'institution_id' => null,
+                'email_verified_at' => Carbon::now(),
+            ]
+        );
 
         // Buat user biasa
-        User::create([
-            'name' => 'sultan',
-            'email' => 'sultan@gmail.com',
-            'password' => Hash::make('password'),
-            'role' => 'user',
-            'institution_id' => null,
-        ]);
+        User::firstOrCreate(
+            ['email' => 'sultan@gmail.com'],
+            [
+                'name' => 'sultan',
+                'password' => Hash::make('password'),
+                'role' => 'user',
+                'institution_id' => null,
+                'email_verified_at' => Carbon::now(),
+            ]
+        );
 
         // Buat instansi
-        $institution = Institution::create([
-            'name' => 'Pesantren Teknologi Majapahit',
-            'code' => 'PTM',
-            'description' => 'Pesantren Teknologi Majapahit',
-        ]);
+        $institution = Institution::firstOrCreate(
+            ['code' => 'PTM'],
+            [
+                'name' => 'Pesantren Teknologi Majapahit',
+                'description' => 'Pesantren Teknologi Majapahit',
+            ]
+        );
 
-        // Buat Institution Admin (contoh) - Optional but good for testing
-        User::create([
-            'name' => 'Admin PTM',
-            'email' => 'admin.ptm@gmail.com',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-            'institution_id' => $institution->id,
-        ]);
+        // Buat Institution Admin (contoh)
+        User::firstOrCreate(
+            ['email' => 'admin.ptm@gmail.com'],
+            [
+                'name' => 'Admin PTM',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+                'institution_id' => $institution->id,
+                'email_verified_at' => Carbon::now(),
+            ]
+        );
 
         // Buat barang
         Item::create([

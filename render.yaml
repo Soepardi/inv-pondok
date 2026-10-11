@@ -32,5 +32,6 @@ databases:
   - name: inv-db
     databaseName: inv_db
     user: inv_user
-    plan: starter
+    plan: basic-256mb
+    diskSizeGB: 5
     region: singapore

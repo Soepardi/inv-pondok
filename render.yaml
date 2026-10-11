@@ -12,7 +12,7 @@ services:
       - key: APP_DEBUG
         value: "false"
       - key: APP_KEY
-        generateValue: true
+        value: "base64:ywxkYd6FRQVbNoDBUb46zrThJhnSeFauluPDQUnQM3k="
       - key: DB_CONNECTION
         value: pgsql
       - key: DATABASE_URL
@@ -20,7 +20,7 @@ services:
           name: inv-db
           property: connectionString
       - key: DB_SSLMODE
-        value: require
+        value: prefer
       - key: SESSION_DRIVER
         value: database
       - key: CACHE_STORE

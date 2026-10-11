@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+vendor
+.env
+.env.backup
+.env.*
+!.env.production
+storage/*.key
+tests
+dev.bat
+dev.ps1

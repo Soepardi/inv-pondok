@@ -24,6 +24,12 @@ php artisan view:cache
 echo "==> Running database migrations..."
 php artisan migrate --force
 
+# Run database seeder if requested
+if [ "$RUN_SEEDER" = "true" ]; then
+    echo "==> Running database seeders..."
+    php artisan db:seed --force
+fi
+
 # Create storage symlink
 echo "==> Creating storage symlink..."
 php artisan storage:link || true
@@ -34,7 +40,7 @@ chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 # Update Apache port if Render's $PORT is set
 PORT="${PORT:-80}"
 sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf
-sed -i "s/\${PORT}/$PORT/g" /etc/apache2/sites-available/000-default.conf
+sed -i "s/<VirtualHost \*:.*>/<VirtualHost \*:$PORT>/g" /etc/apache2/sites-available/000-default.conf
 
 echo "==> Starting Apache on port $PORT..."
 exec apache2-foreground

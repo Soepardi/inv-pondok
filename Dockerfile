@@ -1,6 +1,6 @@
 FROM php:8.3-apache
 
-# Install system dependencies
+# Install system dependencies & PHP extensions
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -15,11 +15,6 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo pdo_pgsql zip gd \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -30,22 +25,11 @@ WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader
 
-# Copy package files and install npm deps
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Copy application files
+# Copy application files (includes pre-built public/build frontend assets)
 COPY . .
-
-# Prepare temporary .env for build process
-RUN cp .env.production .env
 
 # Finalize Composer autoloader
 RUN composer dump-autoload --optimize
-
-# Build frontend assets
-ENV NODE_OPTIONS="--max-old-space-size=2048"
-RUN npm run build
 
 # Apache configuration: point document root to /public
 RUN echo '<VirtualHost *:80>\n\

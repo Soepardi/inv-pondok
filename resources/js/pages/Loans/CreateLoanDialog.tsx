@@ -2,6 +2,7 @@ import { useForm, router } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -230,6 +231,9 @@ export default function LoanItemDialog({ open, onClose, item }: Props) {
             <Package className="h-5 w-5 text-blue-600" />
             Pinjam Barang
           </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Lengkapi formulir peminjaman barang berikut.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Scrollable Content */}

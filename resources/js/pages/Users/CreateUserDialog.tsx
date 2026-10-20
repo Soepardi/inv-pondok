@@ -2,6 +2,7 @@ import { useForm } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,6 +76,9 @@ export default function CreateUserDialog({ open, onClose, users, institutions }:
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Tambah Pengguna</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Tambahkan akun pengguna baru ke sistem.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

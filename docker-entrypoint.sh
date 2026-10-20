@@ -57,6 +57,7 @@ fi
 
 # Create storage symlink
 echo "==> Creating storage symlink..."
+mkdir -p /var/www/html/storage/app/public/items /var/www/html/storage/app/public/returns
 rm -rf /var/www/html/public/storage 2>/dev/null || true
 php artisan storage:link || true
 

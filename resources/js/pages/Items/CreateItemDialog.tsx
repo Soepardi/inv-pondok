@@ -2,6 +2,7 @@ import { useForm } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -90,6 +91,9 @@ const CONDITION_OPTIONS = [
              hover:scrollbar-thumb-gray-500 rounded-lg">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">Tambah Item</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Lengkapi detail barang untuk ditambahkan ke dalam inventaris.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">

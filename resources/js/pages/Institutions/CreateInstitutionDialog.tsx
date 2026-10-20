@@ -2,6 +2,7 @@ import { useForm } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -53,6 +54,9 @@ export default function CreateInstituitionDialog({ open, onClose, institutions }
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Tambah Institusi</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Tambahkan institusi baru ke dalam sistem inventaris.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

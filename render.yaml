@@ -29,6 +29,10 @@ services:
         value: database
       - key: RUN_SEEDER
         value: "false"
+    disk:
+      name: storage-data
+      mountPath: /var/www/html/storage/app/public
+      sizeGB: 1
 
 databases:
   - name: inv-db

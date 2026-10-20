@@ -2,6 +2,7 @@ import { useForm } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,6 +76,9 @@ export default function EditUserDialog({ open, onClose, user, institutions }: Pr
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit Pengguna</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Perbarui data akun pengguna yang dipilih.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

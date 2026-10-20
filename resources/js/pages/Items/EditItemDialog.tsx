@@ -2,6 +2,7 @@ import { useForm, router } from "@inertiajs/react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -77,11 +78,10 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // console.log('Submitting form data:', data);
 
-    // Prepare data untuk dikirim
-    const submitData = {
+    // Gunakan method spoofing POST -> PUT dengan forceFormData agar file multipart terbaca oleh PHP
+    const submitData: Record<string, any> = {
+      _method: "put",
       name: data.name,
       description: data.description,
       price: data.price,
@@ -91,28 +91,22 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
       condition: data.condition,
       institution_id: data.institution_id,
       source_of_funds: data.source_of_funds,
-      photo: data.photo,
     };
 
-    // console.log('Data to be sent:', submitData);
+    if (data.photo instanceof File) {
+      submitData.photo = data.photo;
+    }
 
-    // Gunakan PUT request dengan data
-    router.put(`/items/${item.id}`, submitData, {
-      onSuccess: (page) => {
-        // console.log('Success! Page props:', page.props);
-        // console.log('Flash message:', page.props.flash);
-        
+    router.post(`/items/${item.id}`, submitData, {
+      forceFormData: true,
+      preserveState: true,
+      onSuccess: () => {
         reset();
         onClose();
-        
-        // Refresh data
         router.reload({ only: ['items'] });
       },
       onError: (errors) => {
-        console.log('Validation errors:', errors);
-      },
-      onFinish: () => {
-        // console.log('Request finished');
+        console.error('Validation errors:', errors);
       },
     });
   };
@@ -126,16 +120,13 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent 
         className="max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500 rounded-lg"
-        aria-describedby="edit-item-description"
       >
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">Edit Item</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Perbarui informasi detail barang inventaris.
+          </DialogDescription>
         </DialogHeader>
-
-        {/* Hidden description for accessibility */}
-        <div id="edit-item-description" className="sr-only">
-          Form untuk mengedit item inventory
-        </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Kode Barang - readonly */}

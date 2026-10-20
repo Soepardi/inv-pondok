@@ -28,7 +28,7 @@ services:
       - key: QUEUE_CONNECTION
         value: database
       - key: RUN_SEEDER
-        value: "true"
+        value: "false"
 
 databases:
   - name: inv-db

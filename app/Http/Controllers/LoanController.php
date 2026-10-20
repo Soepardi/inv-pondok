@@ -223,7 +223,7 @@ class LoanController extends Controller
         }
 
         $request->validate([
-            'return_proof' => 'required|image|max:2048',
+            'return_proof' => 'nullable|image|max:2048',
         ]);
 
         // Pastikan status loan adalah 'approved'
@@ -231,11 +231,16 @@ class LoanController extends Controller
             return back()->withErrors(['error' => 'Hanya peminjaman yang disetujui yang bisa dikembalikan.']);
         }
 
-        $loan->update([
+        $data = [
             'status' => 'returned',
             'return_date' => now(),
-            'return_proof' => $request->file('return_proof')->store('returns', 'public'),
-        ]);
+        ];
+
+        if ($request->hasFile('return_proof')) {
+            $data['return_proof'] = $request->file('return_proof')->store('returns', 'public');
+        }
+
+        $loan->update($data);
 
         // Kembalikan stock item
         $item = $loan->item;
@@ -244,9 +249,13 @@ class LoanController extends Controller
             $item->update(['condition' => 'tersedia']);
         }
 
+        $message = $request->hasFile('return_proof')
+            ? 'Barang berhasil dikembalikan dengan bukti foto.'
+            : 'Barang berhasil dikembalikan.';
+
         return redirect()
             ->route('loans.index')
-            ->with('success', 'Barang dikembalikan dengan bukti foto');
+            ->with('success', $message);
     }
 
     // 📌 Hapus pinjaman (hanya admin)

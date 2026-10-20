@@ -57,6 +57,7 @@ fi
 
 # Create storage symlink
 echo "==> Creating storage symlink..."
+rm -rf /var/www/html/public/storage 2>/dev/null || true
 php artisan storage:link || true
 
 # Cache config and routes for production speed

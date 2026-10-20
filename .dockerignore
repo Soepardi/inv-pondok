@@ -10,3 +10,4 @@ storage/*.key
 tests
 dev.bat
 dev.ps1
+public/storage

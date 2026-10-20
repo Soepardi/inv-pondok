@@ -38,7 +38,12 @@ RUN echo '<VirtualHost *:80>\n\
     <Directory /var/www/html/public>\n\
         AllowOverride All\n\
         Require all granted\n\
-        Options -Indexes\n\
+        Options -Indexes +FollowSymLinks\n\
+    </Directory>\n\
+    <Directory /var/www/html/storage/app/public>\n\
+        AllowOverride None\n\
+        Require all granted\n\
+        Options -Indexes +FollowSymLinks\n\
     </Directory>\n\
     ErrorLog ${APACHE_LOG_DIR}/error.log\n\
     CustomLog ${APACHE_LOG_DIR}/access.log combined\n\

@@ -21,7 +21,8 @@ import {
   CheckCircle,
   Clock,
   DollarSign,
-  MapPin
+  MapPin,
+  Wallet
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import CreateItemDialog from './CreateItemDialog';
@@ -493,11 +494,12 @@ export default function Items({
         </div>
 
         {/* List Items - Table Layout */}
-        <div className="rounded-md border bg-card">
+        <div className="rounded-md border bg-card overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[300px]">Barang</TableHead>
+              <TableRow className="bg-muted/30">
+                <TableHead className="min-w-[260px]">Barang</TableHead>
+                <TableHead className="min-w-[140px]">Sumber Dana</TableHead>
                 <TableHead>Status & Kondisi</TableHead>
                 <TableHead>Stok & Harga</TableHead>
                 <TableHead>Lokasi & Instansi</TableHead>
@@ -507,7 +509,7 @@ export default function Items({
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
+                  <TableCell colSpan={6} className="h-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Package className="h-8 w-8 text-muted-foreground" />
                       <p className="text-muted-foreground">Tidak ada barang ditemukan</p>
@@ -521,18 +523,20 @@ export default function Items({
                     <TableCell>
                       <div className="flex items-start gap-4">
                         {/* Image Thumbnail */}
-                        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border bg-muted">
-                          {item.photo ? (
+                        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border bg-muted relative flex items-center justify-center">
+                          {item.photo && (
                             <img
                               src={`/storage/${item.photo}`}
                               alt={item.name}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-cover relative z-10"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
                             />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-secondary">
-                              <Package className="h-6 w-6 text-muted-foreground" />
-                            </div>
                           )}
+                          <div className="absolute inset-0 flex items-center justify-center bg-secondary">
+                            <Package className="h-6 w-6 text-muted-foreground" />
+                          </div>
                         </div>
 
                         {/* Text Details */}
@@ -540,14 +544,21 @@ export default function Items({
                           <span className="font-semibold leading-tight line-clamp-2">{item.name}</span>
                           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                             <span className="font-mono bg-muted px-1 py-0.5 rounded">{item.item_code}</span>
-                            {item.source_of_funds && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900">
-                                Dana: {item.source_of_funds}
-                              </Badge>
-                            )}
                           </div>
                         </div>
                       </div>
+                    </TableCell>
+
+                    {/* SUMBER DANA */}
+                    <TableCell>
+                      {item.source_of_funds ? (
+                        <Badge variant="outline" className="font-normal text-xs py-0.5 px-2 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 flex items-center gap-1.5 w-fit">
+                          <Wallet className="h-3 w-3" />
+                          <span>{item.source_of_funds}</span>
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs italic">-</span>
+                      )}
                     </TableCell>
 
                     {/* STATUS & KONDISI */}

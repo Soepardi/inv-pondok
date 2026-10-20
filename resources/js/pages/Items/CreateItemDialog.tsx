@@ -42,6 +42,7 @@ interface ItemForm {
   status: "baik" | "rusak" | "diperbaiki" | "";
   condition: "tersedia" | "dipinjam" | "hilang" | "";
   institution_id: number | "";
+  source_of_funds: string;
   photo: File | null;
 }
 
@@ -56,6 +57,7 @@ export default function CreateItemDialog({ open, onClose, institutions }: Props)
     status: "",
     condition: "",
     institution_id: "",
+    source_of_funds: "",
     photo: null,
   });
 
@@ -138,8 +140,16 @@ const CONDITION_OPTIONS = [
               <Input
                 id="price"
                 type="number"
+                min="0"
+                step="0.01"
                 value={data.price}
-                onChange={(e) => setData("price", e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e') e.preventDefault();
+                }}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setData("price", isNaN(val) ? "" : Math.max(0, val).toString());
+                }}
                 placeholder="Rp"
               />
               {errors.price && <p className="text-red-500 text-sm">{errors.price}</p>}
@@ -151,26 +161,52 @@ const CONDITION_OPTIONS = [
               <Input
                 id="stock"
                 type="number"
+                min="0"
+                step="1"
                 value={data.stock}
-                onChange={(e) => setData("stock", e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e') e.preventDefault();
+                }}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setData("stock", isNaN(val) ? "" : Math.max(0, val).toString());
+                }}
                 placeholder="Jumlah stok"
               />
               {errors.stock && <p className="text-red-500 text-sm">{errors.stock}</p>}
             </div>
           </div>
 
-          {/* Location */}
-          <div className="space-y-1">
-            <Label htmlFor="location">Lokasi</Label>
-            <Input
-              id="location"
-              value={data.location}
-              onChange={(e) => setData("location", e.target.value)}
-              placeholder="Lokasi penyimpanan"
-            />
-            {errors.location && (
-              <p className="text-red-500 text-sm">{errors.location}</p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Location */}
+            <div className="space-y-1">
+              <Label htmlFor="location">Lokasi</Label>
+              <Input
+                id="location"
+                value={data.location}
+                onChange={(e) => setData("location", e.target.value)}
+                placeholder="Lokasi penyimpanan"
+              />
+              {errors.location && (
+                <p className="text-red-500 text-sm">{errors.location}</p>
+              )}
+            </div>
+
+            {/* Asal Dana (Opsional) */}
+            <div className="space-y-1">
+              <Label htmlFor="source_of_funds">
+                Asal Dana <span className="text-xs text-muted-foreground font-normal">(Opsional)</span>
+              </Label>
+              <Input
+                id="source_of_funds"
+                value={data.source_of_funds}
+                onChange={(e) => setData("source_of_funds", e.target.value)}
+                placeholder="Contoh: BOS, Yayasan, Donasi, Komite"
+              />
+              {errors.source_of_funds && (
+                <p className="text-red-500 text-sm">{errors.source_of_funds}</p>
+              )}
+            </div>
           </div>
 
           {/* Status & Condition */}

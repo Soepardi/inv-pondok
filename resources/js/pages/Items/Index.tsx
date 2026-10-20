@@ -106,6 +106,7 @@ function toItemForm(item: Item): ItemForm {
     condition: item.condition,
     institution_id: item.institution_id,
     photo: item.photo || null,
+    source_of_funds: item.source_of_funds || "",
   };
 }
 
@@ -537,8 +538,13 @@ export default function Items({
                         {/* Text Details */}
                         <div className="flex flex-col gap-1">
                           <span className="font-semibold leading-tight line-clamp-2">{item.name}</span>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                             <span className="font-mono bg-muted px-1 py-0.5 rounded">{item.item_code}</span>
+                            {item.source_of_funds && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900">
+                                Dana: {item.source_of_funds}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -599,8 +605,10 @@ export default function Items({
                           size="icon"
                           variant="ghost"
                           onClick={() => {
-                            if (confirm('Yakin hapus item ini?')) {
-                              router.delete(items.destroy(item.id).url);
+                            if (confirm(`Yakin hapus item "${item.name}"?`)) {
+                              router.delete(items.destroy(item.id).url, {
+                                preserveScroll: true,
+                              });
                             }
                           }}
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"

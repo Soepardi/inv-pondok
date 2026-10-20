@@ -39,6 +39,7 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
     status: item.status || "baik",
     condition: item.condition || "tersedia",
     institution_id: item.institution_id || institutions[0]?.id || 0,
+    source_of_funds: item.source_of_funds || "",
     photo: null as File | null,
   });
 
@@ -56,6 +57,7 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
         status: item.status || "baik",
         condition: item.condition || "tersedia",
         institution_id: item.institution_id || institutions[0]?.id || 0,
+        source_of_funds: item.source_of_funds || "",
         photo: null,
       });
     }
@@ -88,6 +90,7 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
       status: data.status,
       condition: data.condition,
       institution_id: data.institution_id,
+      source_of_funds: data.source_of_funds,
       photo: data.photo,
     };
 
@@ -195,7 +198,13 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
                 min="0"
                 step="0.01"
                 value={data.price}
-                onChange={(e) => setData("price", Number(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e') e.preventDefault();
+                }}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setData("price", isNaN(val) ? 0 : Math.max(0, val));
+                }}
                 placeholder="0"
                 className={errors.price ? "border-red-500" : ""}
               />
@@ -212,8 +221,15 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
                 id="stock"
                 type="number"
                 min="0"
+                step="1"
                 value={data.stock}
-                onChange={(e) => setData("stock", Number(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e') e.preventDefault();
+                }}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setData("stock", isNaN(val) ? 0 : Math.max(0, val));
+                }}
                 placeholder="0"
                 className={errors.stock ? "border-red-500" : ""}
               />
@@ -223,21 +239,40 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
             </div>
           </div>
 
-          {/* Lokasi */}
-          <div className="space-y-1">
-            <Label htmlFor="location" className="text-sm font-medium">
-              Lokasi <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="location"
-              value={data.location}
-              onChange={(e) => setData("location", e.target.value)}
-              placeholder="Masukkan lokasi penyimpanan"
-              className={errors.location ? "border-red-500" : ""}
-            />
-            {errors.location && (
-              <p className="text-red-500 text-sm mt-1">{errors.location}</p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Lokasi */}
+            <div className="space-y-1">
+              <Label htmlFor="location" className="text-sm font-medium">
+                Lokasi <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="location"
+                value={data.location}
+                onChange={(e) => setData("location", e.target.value)}
+                placeholder="Masukkan lokasi penyimpanan"
+                className={errors.location ? "border-red-500" : ""}
+              />
+              {errors.location && (
+                <p className="text-red-500 text-sm mt-1">{errors.location}</p>
+              )}
+            </div>
+
+            {/* Asal Dana */}
+            <div className="space-y-1">
+              <Label htmlFor="source_of_funds" className="text-sm font-medium">
+                Asal Dana <span className="text-xs text-muted-foreground font-normal">(Opsional)</span>
+              </Label>
+              <Input
+                id="source_of_funds"
+                value={data.source_of_funds}
+                onChange={(e) => setData("source_of_funds", e.target.value)}
+                placeholder="Contoh: BOS, Yayasan, Donasi, Komite"
+                className={errors.source_of_funds ? "border-red-500" : ""}
+              />
+              {errors.source_of_funds && (
+                <p className="text-red-500 text-sm mt-1">{errors.source_of_funds}</p>
+              )}
+            </div>
           </div>
 
           {/* Status & Kondisi */}

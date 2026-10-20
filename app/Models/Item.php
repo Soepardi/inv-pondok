@@ -20,6 +20,8 @@ class Item extends Model
         'condition',
         'photo',
         'institution_id',
+        'source_of_funds',
+        'purchase_year',
     ];
 
 

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class ItemController extends Controller
 {
@@ -112,6 +113,11 @@ class ItemController extends Controller
     {
         $user = auth()->user();
 
+        $request->merge([
+            'price' => max(0, (float) $request->input('price', 0)),
+            'stock' => max(0, (int) $request->input('stock', 0)),
+        ]);
+
         $request->validate([
             'number_code' => 'required|string',
             'name' => 'required|string|max:255',
@@ -123,6 +129,7 @@ class ItemController extends Controller
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
             'photo' => 'nullable|image|max:2048',
+            'source_of_funds' => 'nullable|string|max:255',
         ]);
 
         // Force institution ID if admin is strict
@@ -140,7 +147,8 @@ class ItemController extends Controller
             'location',
             'status',
             'condition',
-            'institution_id'
+            'institution_id',
+            'source_of_funds',
         ]);
 
         $data['item_code'] = $institution->code . '-' . $request->number_code;
@@ -172,8 +180,8 @@ class ItemController extends Controller
         //Log::info('📁 Files:', $request->allFiles());
         //Log::info('🔍 Item ID: ' . $item->id);
         $request->merge([
-            'price' => $request->price ? (float) $request->price : 0,
-            'stock' => $request->stock ? (int) $request->stock : 0,
+            'price' => max(0, (float) $request->input('price', 0)),
+            'stock' => max(0, (int) $request->input('stock', 0)),
         ]);
         // Validasi input
         $validated = $request->validate([
@@ -186,6 +194,7 @@ class ItemController extends Controller
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
             'photo' => 'nullable|image|max:2048',
+            'source_of_funds' => 'nullable|string|max:255',
         ]);
 
         Log::info('✅ Validation passed:', $validated);
@@ -199,6 +208,7 @@ class ItemController extends Controller
         $item->status = $validated['status'];
         $item->condition = $validated['condition'];
         $item->institution_id = $validated['institution_id'];
+        $item->source_of_funds = $validated['source_of_funds'] ?? null;
 
         // Handle file upload
         if ($request->hasFile('photo')) {
@@ -233,8 +243,30 @@ class ItemController extends Controller
     // Hapus item
     public function destroy(Item $item)
     {
-        $item->delete();
-        return redirect()->route('items.index')->with('success', 'Item berhasil dihapus');
+        $user = auth()->user();
+
+        // Cek izin instansi jika user adalah admin instansi
+        if ($user->role === 'admin' && $user->institution_id && $item->institution_id !== $user->institution_id) {
+            return back()->with('error', 'Anda tidak memiliki hak untuk menghapus item ini.');
+        }
+
+        // Cek apakah item sedang memiliki pinjaman aktif (pending / approved)
+        if ($item->loans()->whereIn('status', ['pending', 'approved'])->exists()) {
+            return back()->with('error', 'Item tidak dapat dihapus karena masih ada transaksi peminjaman aktif.');
+        }
+
+        try {
+            // Hapus file foto jika ada
+            if ($item->photo && Storage::disk('public')->exists($item->photo)) {
+                Storage::disk('public')->delete($item->photo);
+            }
+
+            $item->delete();
+            return redirect()->route('items.index')->with('success', 'Item berhasil dihapus');
+        } catch (\Throwable $e) {
+            Log::error('Error deleting item: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menghapus item: ' . $e->getMessage());
+        }
     }
 
     // Tampilkan detail item (optional)

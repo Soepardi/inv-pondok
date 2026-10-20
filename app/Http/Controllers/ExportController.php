@@ -47,14 +47,15 @@ class ExportController extends Controller
             ->setPaperSize(PageSetup::PAPERSIZE_A4);
 
         // Set title
+        // Set title
         $sheet->setCellValue('A1', 'DATA BARANG INVENTARIS');
-        $sheet->mergeCells('A1:J1');
+        $sheet->mergeCells('A1:L1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Set export info
         $sheet->setCellValue('A2', 'Diekspor pada: ' . date('d/m/Y H:i:s'));
-        $sheet->mergeCells('A2:J2');
+        $sheet->mergeCells('A2:L2');
         $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle('A2')->getFont()->setItalic(true);
 
@@ -64,6 +65,7 @@ class ExportController extends Controller
             'KODE BARANG',
             'NAMA BARANG',
             'DESKRIPSI',
+            'ASAL DANA',
             'HARGA',
             'STOK',
             'LOKASI',
@@ -96,7 +98,7 @@ class ExportController extends Controller
                 ],
             ],
         ];
-        $sheet->getStyle('A4:K4')->applyFromArray($headerStyle);
+        $sheet->getStyle('A4:L4')->applyFromArray($headerStyle);
 
         // Add data
         $row = 5;
@@ -106,13 +108,14 @@ class ExportController extends Controller
             $sheet->setCellValue('B' . $row, $item->item_code);
             $sheet->setCellValue('C' . $row, $item->name);
             $sheet->setCellValue('D' . $row, $item->description);
-            $sheet->setCellValue('E' . $row, 'Rp ' . number_format($item->price, 0, ',', '.'));
-            $sheet->setCellValue('F' . $row, $item->stock);
-            $sheet->setCellValue('G' . $row, $item->location);
-            $sheet->setCellValue('H' . $row, ucfirst($item->status));
-            $sheet->setCellValue('I' . $row, ucfirst($item->condition));
-            $sheet->setCellValue('J' . $row, $item->institution->name);
-            $sheet->setCellValue('K' . $row, $item->created_at->format('d/m/Y H:i'));
+            $sheet->setCellValue('E' . $row, $item->source_of_funds ?: '-');
+            $sheet->setCellValue('F' . $row, 'Rp ' . number_format($item->price, 0, ',', '.'));
+            $sheet->setCellValue('G' . $row, $item->stock);
+            $sheet->setCellValue('H' . $row, $item->location);
+            $sheet->setCellValue('I' . $row, ucfirst($item->status));
+            $sheet->setCellValue('J' . $row, ucfirst($item->condition));
+            $sheet->setCellValue('K' . $row, $item->institution?->name ?? '-');
+            $sheet->setCellValue('L' . $row, $item->created_at?->format('d/m/Y H:i') ?? '-');
 
             $row++;
             $number++;
@@ -131,22 +134,23 @@ class ExportController extends Controller
             ],
         ];
         $lastRow = $row - 1;
-        $sheet->getStyle('A5:K' . $lastRow)->applyFromArray($dataStyle);
+        $sheet->getStyle('A5:L' . $lastRow)->applyFromArray($dataStyle);
 
         // Auto size columns
-        foreach (range('A', 'K') as $column) {
+        foreach (range('A', 'L') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
-        // Set column width for description
+        // Set column width for description & source of funds
         $sheet->getColumnDimension('D')->setWidth(30);
+        $sheet->getColumnDimension('E')->setWidth(20);
 
         // Center align number and stock columns
         $sheet->getStyle('A5:A' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('F5:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('G5:G' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Add filters
-        $sheet->setAutoFilter('A4:K' . $lastRow);
+        $sheet->setAutoFilter('A4:L' . $lastRow);
 
         // Freeze panes (header row)
         $sheet->freezePane('A5');

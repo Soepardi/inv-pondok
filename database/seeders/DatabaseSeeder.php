@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
         );
 
         // Buat user biasa
-        User::firstOrCreate(
+        $userSultan = User::firstOrCreate(
             ['email' => 'sultan@gmail.com'],
             [
                 'name' => 'sultan',
@@ -59,70 +59,78 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Buat barang
-        Item::create([
-            'name' => 'Laptop Lenovo Thinkpad',
-            'item_code' => 'LNP-001',
-            'description' => 'Laptop untuk keperluan administrasi',
-            'stock' => 5, // Stok total
-            'price' => 8500000,
-            'location' => 'Ruang Tata Usaha',
-            'status' => 'baik',
-            'condition' => 'tersedia',
-            'institution_id' => $institution->id,
-        ]);
+        // Buat barang (gunakan firstOrCreate agar tidak error duplicate item_code)
+        $laptop = Item::firstOrCreate(
+            ['item_code' => 'LNP-001'],
+            [
+                'name' => 'Laptop Lenovo Thinkpad',
+                'description' => 'Laptop untuk keperluan administrasi',
+                'stock' => 4, // 5 total - 1 dipinjam
+                'price' => 8500000,
+                'location' => 'Ruang Tata Usaha',
+                'status' => 'baik',
+                'condition' => 'tersedia',
+                'institution_id' => $institution->id,
+            ]
+        );
 
-        Item::create([
-            'name' => 'Proyektor Epson',
-            'item_code' => 'PRJ-001',
-            'description' => 'Digunakan untuk presentasi di kelas',
-            'stock' => 2,
-            'price' => 4500000,
-            'location' => 'Aula',
-            'status' => 'baik',
-            'condition' => 'tersedia',
-            'institution_id' => $institution->id,
-        ]);
+        $proyektor = Item::firstOrCreate(
+            ['item_code' => 'PRJ-001'],
+            [
+                'name' => 'Proyektor Epson',
+                'description' => 'Digunakan untuk presentasi di kelas',
+                'stock' => 1, // 2 total - 1 dipinjam
+                'price' => 4500000,
+                'location' => 'Aula',
+                'status' => 'baik',
+                'condition' => 'tersedia',
+                'institution_id' => $institution->id,
+            ]
+        );
 
-        Item::create([
-            'name' => 'Meja Belajar',
-            'item_code' => 'MJB-001',
-            'description' => 'Meja untuk santri kelas 10',
-            'stock' => 20,
-            'price' => 350000,
-            'location' => 'Kelas 10A',
-            'status' => 'baik',
-            'condition' => 'tersedia',
-            'institution_id' => $institution->id,
-        ]);
+        $meja = Item::firstOrCreate(
+            ['item_code' => 'MJB-001'],
+            [
+                'name' => 'Meja Belajar',
+                'description' => 'Meja untuk santri kelas 10',
+                'stock' => 20,
+                'price' => 350000,
+                'location' => 'Kelas 10A',
+                'status' => 'baik',
+                'condition' => 'tersedia',
+                'institution_id' => $institution->id,
+            ]
+        );
 
-        // Buat loan dengan due_date, notes, dan stock
-        Loan::create([
-            'user_id' => 2, // user 'sultan'
-            'item_id' => 1, // Laptop Lenovo
-            'loan_date' => Carbon::now()->subDays(5),
-            'due_date' => Carbon::now()->addDays(2),
-            'status' => 'approved',
-            'stock' => 1,
-            'notes' => 'Untuk administrasi TU',
-        ]);
+        // Buat loan dengan due_date, notes, dan stock (gunakan firstOrCreate)
+        if ($userSultan) {
+            Loan::firstOrCreate(
+                [
+                    'user_id' => $userSultan->id,
+                    'item_id' => $laptop->id,
+                ],
+                [
+                    'loan_date' => Carbon::now()->subDays(5),
+                    'due_date' => Carbon::now()->addDays(2),
+                    'status' => 'approved',
+                    'stock' => 1,
+                    'notes' => 'Untuk administrasi TU',
+                ]
+            );
 
-        Loan::create([
-            'user_id' => 2,
-            'item_id' => 2, // Proyektor Epson
-            'loan_date' => Carbon::now()->subDays(10),
-            'due_date' => Carbon::now()->subDays(1), // lewat jatuh tempo
-            'status' => 'approved',
-            'stock' => 1,
-            'notes' => 'Dipakai di kelas 10A',
-        ]);
-
-        // Decrement item stock manually to reflect loans?
-        // In a seeder, if we want consistency, we should:
-        // Item 1 (Laptop): Initial 5, Loaned 1 -> Should be 4 in DB?
-        // Or we assume 'stock' in Item is "Current Available Stock".
-        // Let's manually update them to match "reality".
-        Item::find(1)->decrement('stock', 1);
-        Item::find(2)->decrement('stock', 1);
+            Loan::firstOrCreate(
+                [
+                    'user_id' => $userSultan->id,
+                    'item_id' => $proyektor->id,
+                ],
+                [
+                    'loan_date' => Carbon::now()->subDays(10),
+                    'due_date' => Carbon::now()->subDays(1), // lewat jatuh tempo
+                    'status' => 'approved',
+                    'stock' => 1,
+                    'notes' => 'Dipakai di kelas 10A',
+                ]
+            );
+        }
     }
 }

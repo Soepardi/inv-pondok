@@ -7,6 +7,7 @@ use App\Models\Item;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
+use App\Helpers\ImageHelper;
 
 class LoanController extends Controller
 {
@@ -223,7 +224,11 @@ class LoanController extends Controller
         }
 
         $request->validate([
-            'return_proof' => 'nullable|image|max:2048',
+            'return_proof' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+        ], [
+            'return_proof.image' => 'File bukti pengembalian harus berupa gambar.',
+            'return_proof.mimes' => 'Format file bukti harus berupa JPG, PNG, atau WEBP. Format GIF dan SVG tidak diizinkan.',
+            'return_proof.max' => 'Ukuran file bukti maksimal 10MB.',
         ]);
 
         // Pastikan status loan adalah 'approved'
@@ -237,7 +242,7 @@ class LoanController extends Controller
         ];
 
         if ($request->hasFile('return_proof')) {
-            $data['return_proof'] = $request->file('return_proof')->store('returns', 'public');
+            $data['return_proof'] = ImageHelper::storeCompressed($request->file('return_proof'), 'returns', 'public');
         }
 
         $loan->update($data);

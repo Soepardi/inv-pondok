@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ItemForm, Institution } from "@/types/item";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { compressImage, formatFileSize, isAllowedImageType } from "@/lib/image-compressor";
 
 interface Props {
   open: boolean;
@@ -29,6 +30,9 @@ interface Props {
 }
 
 export default function EditItemDialog({ open, onClose, institutions, item }: Props) {
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
+
   const { data, setData, processing, errors, reset } = useForm({
     id: item.id,
     item_code: item.item_code || "",
@@ -111,9 +115,42 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setData("photo", file);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setData("photo", null);
+      setCompressionInfo(null);
+      return;
+    }
+
+    if (!isAllowedImageType(file)) {
+      alert("Format file tidak didukung! Hanya gambar JPG, PNG, atau WEBP yang diperbolehkan (GIF dan SVG tidak diizinkan demi keamanan).");
+      e.target.value = "";
+      setData("photo", null);
+      setCompressionInfo(null);
+      return;
+    }
+
+    setIsCompressing(true);
+    setCompressionInfo("Sedang mengompresi gambar...");
+
+    try {
+      const compressed = await compressImage(file);
+      setData("photo", compressed);
+      const originalText = formatFileSize(file.size);
+      const compressedText = formatFileSize(compressed.size);
+      if (compressed.size < file.size) {
+        const savedPercent = Math.round((1 - compressed.size / file.size) * 100);
+        setCompressionInfo(`Dikompres: ${originalText} ➔ ${compressedText} (hemat ${savedPercent}%)`);
+      } else {
+        setCompressionInfo(`Ukuran: ${compressedText}`);
+      }
+    } catch {
+      setData("photo", file);
+      setCompressionInfo(null);
+    } finally {
+      setIsCompressing(false);
+    }
   };
 
   return (
@@ -384,12 +421,18 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
             <Input
               id="photo"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               onChange={handleFileChange}
+              disabled={isCompressing}
               className={errors.photo ? "border-red-500" : ""}
             />
-            <p className="text-xs text-gray-500">
-              Format: JPG, PNG, JPEG (Maksimal 2MB). Kosongkan jika tidak ingin mengubah foto.
+            {compressionInfo && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-1">
+                ✓ {compressionInfo}
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Format: JPG, PNG, WEBP (GIF dan SVG tidak diizinkan). Kosongkan jika tidak ingin mengubah foto. Gambar akan otomatis dikompres.
             </p>
             {errors.photo && (
               <p className="text-red-500 text-sm mt-1">{errors.photo}</p>
@@ -425,20 +468,29 @@ export default function EditItemDialog({ open, onClose, institutions, item }: Pr
             <Button 
               type="button" 
               variant="outline" 
-              onClick={onClose}
-              disabled={processing}
+              onClick={() => {
+                setCompressionInfo(null);
+                setIsCompressing(false);
+                onClose();
+              }}
+              disabled={processing || isCompressing}
             >
               Batal
             </Button>
             <Button 
               type="submit" 
-              disabled={processing}
+              disabled={processing || isCompressing}
               className="min-w-24"
             >
               {processing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Menyimpan...
+                </>
+              ) : isCompressing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Mengompres...
                 </>
               ) : (
                 "Simpan Perubahan"

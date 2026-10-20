@@ -18,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useState } from "react";
+import { compressImage, formatFileSize, isAllowedImageType } from "@/lib/image-compressor";
 
 
 
@@ -48,6 +50,9 @@ interface ItemForm {
 }
 
 export default function CreateItemDialog({ open, onClose, institutions }: Props) {
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
+
   const { data, setData, post, processing, errors, reset } = useForm<ItemForm>({
     number_code: "",
     name: "",
@@ -62,13 +67,57 @@ export default function CreateItemDialog({ open, onClose, institutions }: Props)
     photo: null,
   });
 
+  const handleClose = () => {
+    setCompressionInfo(null);
+    setIsCompressing(false);
+    onClose();
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setData("photo", null);
+      setCompressionInfo(null);
+      return;
+    }
+
+    if (!isAllowedImageType(file)) {
+      alert("Format file tidak didukung! Hanya gambar JPG, PNG, atau WEBP yang diperbolehkan (GIF dan SVG tidak diizinkan demi keamanan).");
+      e.target.value = "";
+      setData("photo", null);
+      setCompressionInfo(null);
+      return;
+    }
+
+    setIsCompressing(true);
+    setCompressionInfo("Sedang mengompresi gambar...");
+
+    try {
+      const compressed = await compressImage(file);
+      setData("photo", compressed);
+      const originalText = formatFileSize(file.size);
+      const compressedText = formatFileSize(compressed.size);
+      if (compressed.size < file.size) {
+        const savedPercent = Math.round((1 - compressed.size / file.size) * 100);
+        setCompressionInfo(`Dikompres: ${originalText} ➔ ${compressedText} (hemat ${savedPercent}%)`);
+      } else {
+        setCompressionInfo(`Ukuran: ${compressedText}`);
+      }
+    } catch {
+      setData("photo", file);
+      setCompressionInfo(null);
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     post("/items", {
       forceFormData: true,
       onSuccess: () => {
         reset();
-        onClose();
+        handleClose();
       },
     });
   };
@@ -291,13 +340,26 @@ const CONDITION_OPTIONS = [
           </div>
 
           {/* Photo */}
-          <div className="space-y-1">
-            <Label htmlFor="photo">Foto</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="photo">Foto Barang</Label>
+              <span className="text-xs text-muted-foreground">Opsional</span>
+            </div>
             <Input
               id="photo"
               type="file"
-              onChange={(e) => setData("photo", e.target.files?.[0] || null)}
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handlePhotoChange}
+              disabled={isCompressing}
             />
+            <p className="text-xs text-muted-foreground">
+              Format: JPG, PNG, WEBP (GIF dan SVG tidak diizinkan). Otomatis dikompres.
+            </p>
+            {compressionInfo && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                ✓ {compressionInfo}
+              </p>
+            )}
             {errors.photo && (
               <p className="text-red-500 text-sm">{errors.photo}</p>
             )}
@@ -305,11 +367,11 @@ const CONDITION_OPTIONS = [
 
           {/* Submit */}
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={handleClose}>
               Batal
             </Button>
-            <Button type="submit" disabled={processing}>
-              {processing ? "Menyimpan..." : "Simpan"}
+            <Button type="submit" disabled={processing || isCompressing}>
+              {processing ? "Menyimpan..." : isCompressing ? "Mengompres..." : "Simpan"}
             </Button>
           </div>
         </form>

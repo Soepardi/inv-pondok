@@ -71,6 +71,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { compressImage, formatFileSize, isAllowedImageType } from "@/lib/image-compressor";
 
 
 
@@ -201,6 +202,7 @@ export default function LoanIndex({
   const [returnProofFile, setReturnProofFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [viewProofModal, setViewProofModal] = useState<{ url: string; itemName: string } | null>(null);
+  const [isCompressingProof, setIsCompressingProof] = useState(false);
 
   const { props } = usePage<PageProps>();
   const flash = props.flash;
@@ -286,15 +288,33 @@ export default function LoanIndex({
     setPreviewUrl(null);
   };
 
-  const handleReturnFileChange = (file: File | null) => {
+  const handleReturnFileChange = async (file: File | null) => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
-    setReturnProofFile(file);
-    if (file) {
-      setPreviewUrl(URL.createObjectURL(file));
-    } else {
+    if (!file) {
+      setReturnProofFile(null);
       setPreviewUrl(null);
+      return;
+    }
+
+    if (!isAllowedImageType(file)) {
+      toast.error("Format file tidak didukung! Hanya gambar JPG, PNG, atau WEBP yang diperbolehkan (GIF dan SVG tidak diizinkan demi keamanan).");
+      setReturnProofFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+
+    setIsCompressingProof(true);
+    try {
+      const compressed = await compressImage(file);
+      setReturnProofFile(compressed);
+      setPreviewUrl(URL.createObjectURL(compressed));
+    } catch {
+      setReturnProofFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    } finally {
+      setIsCompressingProof(false);
     }
   };
 
@@ -934,13 +954,13 @@ export default function LoanIndex({
                         </div>
                         <div className="text-xs">
                           <span className="font-semibold text-primary">Pilih foto</span> atau klik di sini
-                          <p className="text-[11px] text-muted-foreground mt-0.5">JPG, PNG, WEBP (Maksimal 2MB)</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">JPG, PNG, WEBP (Maksimal 2MB, tanpa GIF/SVG)</p>
                         </div>
                       </label>
                       <Input
                         id="return-proof-modal-input"
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp"
                         className="hidden"
                         onChange={(e) => handleReturnFileChange(e.target.files?.[0] || null)}
                       />
@@ -958,18 +978,18 @@ export default function LoanIndex({
                 type="button"
                 variant="outline"
                 onClick={closeReturnModal}
-                disabled={processingLoan !== null}
+                disabled={processingLoan !== null || isCompressingProof}
               >
                 Batal
               </Button>
               <Button
                 type="button"
                 onClick={handleConfirmReturn}
-                disabled={processingLoan !== null}
+                disabled={processingLoan !== null || isCompressingProof}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
                 <Check className="h-4 w-4" />
-                {processingLoan !== null ? "Menyimpan..." : "Konfirmasi Pengembalian"}
+                {processingLoan !== null ? "Menyimpan..." : isCompressingProof ? "Mengompres..." : "Konfirmasi Pengembalian"}
               </Button>
             </DialogFooter>
           </DialogContent>

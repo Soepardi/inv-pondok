@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\ImageHelper;
 
 class ItemController extends Controller
 {
@@ -128,8 +129,12 @@ class ItemController extends Controller
             'status' => 'required|in:baik,rusak,diperbaiki',
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
-            'photo' => 'nullable|image|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
             'source_of_funds' => 'nullable|string|max:255',
+        ], [
+            'photo.image' => 'File harus berupa gambar.',
+            'photo.mimes' => 'Format foto harus berupa JPG, PNG, atau WEBP. Format GIF dan SVG tidak diizinkan.',
+            'photo.max' => 'Ukuran file foto maksimal 10MB.',
         ]);
 
         // Force institution ID if admin is strict
@@ -154,7 +159,7 @@ class ItemController extends Controller
         $data['item_code'] = $institution->code . '-' . $request->number_code;
 
         if ($request->hasFile('photo')) {
-            $data['photo'] = $request->file('photo')->store('items', 'public');
+            $data['photo'] = ImageHelper::storeCompressed($request->file('photo'), 'items', 'public');
         }
 
         Item::create($data);
@@ -193,8 +198,12 @@ class ItemController extends Controller
             'status' => 'required|in:baik,rusak,diperbaiki',
             'condition' => 'required|in:tersedia,dipinjam,hilang',
             'institution_id' => 'required|exists:institutions,id',
-            'photo' => 'nullable|image|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
             'source_of_funds' => 'nullable|string|max:255',
+        ], [
+            'photo.image' => 'File harus berupa gambar.',
+            'photo.mimes' => 'Format foto harus berupa JPG, PNG, atau WEBP. Format GIF dan SVG tidak diizinkan.',
+            'photo.max' => 'Ukuran file foto maksimal 10MB.',
         ]);
 
         Log::info('✅ Validation passed:', $validated);
@@ -212,14 +221,12 @@ class ItemController extends Controller
 
         // Handle file upload
         if ($request->hasFile('photo')) {
-            //Log::info('🖼️ Processing photo upload: ' . $request->file('photo')->getClientOriginalName());
-
             // Hapus foto lama jika ada
-            if ($item->photo && \Storage::disk('public')->exists($item->photo)) {
-                \Storage::disk('public')->delete($item->photo);
+            if ($item->photo && Storage::disk('public')->exists($item->photo)) {
+                Storage::disk('public')->delete($item->photo);
             }
 
-            $item->photo = $request->file('photo')->store('items', 'public');
+            $item->photo = ImageHelper::storeCompressed($request->file('photo'), 'items', 'public');
             Log::info('📸 Photo stored at: ' . $item->photo);
         }
 
